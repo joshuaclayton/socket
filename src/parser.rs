@@ -1,8 +1,9 @@
-use super::{Attribute, Node, Nodes, Tag};
+use super::{context::Selector, Attribute, Node, Nodes, Tag};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_till, take_while},
-    combinator::{map, opt},
+    character::complete::digit1,
+    combinator::{map, map_res, opt, recognize},
     multi::{count, many0, many1, separated_list},
     sequence::{pair, preceded, terminated},
     IResult,
@@ -55,7 +56,7 @@ fn parse_node_with_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>
 fn parse_node_with_interpolated_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
     Box::new(move |input| {
         let (input, tag) = terminated(parse_tag, tag("= "))(input)?;
-        let (input, contents) = map(to_newline, Node::InterpolatedText)(input)?;
+        let (input, contents) = map(parse_selector, Node::InterpolatedText)(input)?;
         let (input, mut children) = parse_nodes(depth + 1)(input)?;
         children.prepend(contents);
 
@@ -110,6 +111,46 @@ fn parse_custom_attributes(input: &str) -> IResult<&str, Vec<Attribute>> {
     )(input)
 }
 
+fn parse_usize(input: &str) -> IResult<&str, usize> {
+    map_res(recognize(digit1), str::parse)(input)
+}
+
+fn parse_selector_object_index(input: &str) -> IResult<&str, Selector> {
+    map(parse_usize, Selector::Index)(input)
+}
+
+fn parse_selector_array_index(input: &str) -> IResult<&str, Selector> {
+    preceded(tag("["), terminated(parse_selector_object_index, tag("]")))(input)
+}
+
+fn parse_selector_key(input: &str) -> IResult<&str, Selector> {
+    map(take_while(|c: char| c.is_alphanumeric()), Selector::Key)(input)
+}
+
+fn first_selector(input: &str) -> IResult<&str, Selector> {
+    alt((
+        parse_selector_object_index,
+        parse_selector_array_index,
+        parse_selector_key,
+    ))(input)
+}
+
+fn subsequent_selector(input: &str) -> IResult<&str, Selector> {
+    alt((
+        preceded(tag("."), parse_selector_object_index),
+        parse_selector_array_index,
+        preceded(tag("."), parse_selector_key),
+    ))(input)
+}
+
+fn parse_selector(input: &str) -> IResult<&str, Vec<Selector>> {
+    let (input, first) = first_selector(input)?;
+    let (input, mut selectors) = many0(subsequent_selector)(input)?;
+
+    selectors.insert(0, first);
+    Ok((input, selectors))
+}
+
 fn parse_implicit_tag(input: &str) -> IResult<&str, Tag> {
     let (input, mut attributes) = parse_attributes(input)?;
 
@@ -150,6 +191,7 @@ pub fn to_newline(input: &str) -> IResult<&str, &str> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::context::Selector;
     use super::super::Attribute;
     use super::super::Socket;
 
@@ -324,5 +366,34 @@ mod tests {
                 .to_html(),
             "<h1>Hello world</h1>"
         );
+    }
+
+    #[test]
+    fn object_interpolation() {
+        assert_eq!(
+            Socket::parse("%h1= title.primary\n%h2= title.secondary")
+                .unwrap()
+                .with_context("{\"title\": {\"primary\": \"Hello world\", \"secondary\": \"wow this works\"}}")
+                .to_html(),
+            "<h1>Hello world</h1><h2>wow this works</h2>"
+        );
+    }
+
+    #[test]
+    fn selector_parser() {
+        assert_eq!(
+            super::parse_selector("foo.bar[0].one.1.nested").unwrap(),
+            (
+                "",
+                vec![
+                    Selector::Key("foo"),
+                    Selector::Key("bar"),
+                    Selector::Index(0),
+                    Selector::Key("one"),
+                    Selector::Index(1),
+                    Selector::Key("nested"),
+                ]
+            )
+        )
     }
 }

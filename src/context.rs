@@ -1,7 +1,14 @@
 use serde_json::Value;
+use std::slice::Iter;
 
 pub struct Context {
     payload: serde_json::Value,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Selector<'a> {
+    Key(&'a str),
+    Index(usize),
 }
 
 impl Context {
@@ -15,11 +22,29 @@ impl Context {
         Context { payload }
     }
 
-    pub fn interpret(&self, value: &str) -> String {
-        match &self.payload {
-            Value::Object(map) => map.get(value).map(value_to_string).unwrap_or(String::new()),
+    pub fn interpret(&self, value: Iter<Selector>) -> String {
+        handle(&self.payload, value)
+    }
+}
+
+fn handle(payload: &Value, mut value: Iter<Selector>) -> String {
+    match value.next() {
+        None => value_to_string(payload),
+        Some(Selector::Key(key)) => match payload {
+            Value::Object(map) => map
+                .get(*key)
+                .map(|value_for_key| handle(value_for_key, value))
+                .unwrap_or(String::new()),
             _ => String::from("unable to parse"),
-        }
+        },
+
+        Some(Selector::Index(index)) => match payload {
+            Value::Array(records) => records
+                .get(*index)
+                .map(value_to_string)
+                .unwrap_or("".to_string()),
+            _ => String::from("unable to parse"),
+        },
     }
 }
 
