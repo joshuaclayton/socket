@@ -52,6 +52,17 @@ fn parse_node_with_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>
     })
 }
 
+fn parse_node_with_interpolated_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
+    Box::new(move |input| {
+        let (input, tag) = terminated(parse_tag, tag("= "))(input)?;
+        let (input, contents) = map(to_newline, Node::InterpolatedText)(input)?;
+        let (input, mut children) = parse_nodes(depth + 1)(input)?;
+        children.prepend(contents);
+
+        Ok((input, Node::Element { tag, children }))
+    })
+}
+
 fn parse_node_without_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
     Box::new(move |input| {
         let (input, tag) = parse_tag(input)?;
@@ -126,6 +137,7 @@ fn parse_node(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
         let (input, _) = count(tag("  "), depth)(input)?;
         alt((
             parse_node_with_text(depth),
+            parse_node_with_interpolated_text(depth),
             parse_node_without_text(depth),
             parse_text_node,
         ))(input)
@@ -300,6 +312,17 @@ mod tests {
                     Attribute::Custom("content", "ie=edge")
                 ]
             )
+        );
+    }
+
+    #[test]
+    fn simple_interpolation() {
+        assert_eq!(
+            Socket::parse("%h1= title")
+                .unwrap()
+                .with_context("{\"title\": \"Hello world\"}")
+                .to_html(),
+            "<h1>Hello world</h1>"
         );
     }
 }
