@@ -22,28 +22,43 @@ impl Context {
         Context { payload }
     }
 
-    pub fn interpret(&self, value: Iter<Selector>) -> String {
-        handle(&self.payload, value)
+    pub fn interpret(&self, value: &[Selector]) -> String {
+        self.at(value).map(value_to_string).unwrap_or("".into())
+    }
+
+    pub fn at(&self, value: &[Selector]) -> Option<&Value> {
+        handle(&self.payload, value.iter())
+    }
+
+    pub fn extend(&self, key: &str, value: &Value) -> Self {
+        match &self.payload {
+            Value::Object(map) => {
+                let mut new_map = map.clone();
+                new_map.insert(key.into(), value.clone());
+                Context {
+                    payload: Value::Object(new_map),
+                }
+            }
+            payload => Context {
+                payload: payload.clone(),
+            },
+        }
     }
 }
 
-fn handle(payload: &Value, mut value: Iter<Selector>) -> String {
+fn handle<'a>(payload: &'a Value, mut value: Iter<Selector>) -> Option<&'a Value> {
     match value.next() {
-        None => value_to_string(payload),
+        None => Some(payload),
         Some(Selector::Key(key)) => match payload {
             Value::Object(map) => map
                 .get(*key)
-                .map(|value_for_key| handle(value_for_key, value))
-                .unwrap_or(String::new()),
-            _ => String::from("unable to parse"),
+                .and_then(|value_for_key| handle(value_for_key, value)),
+            _ => None,
         },
 
         Some(Selector::Index(index)) => match payload {
-            Value::Array(records) => records
-                .get(*index)
-                .map(value_to_string)
-                .unwrap_or("".to_string()),
-            _ => String::from("unable to parse"),
+            Value::Array(records) => records.get(*index),
+            _ => None,
         },
     }
 }

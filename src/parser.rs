@@ -42,6 +42,26 @@ fn parse_text_node(input: &str) -> IResult<&str, Node> {
     map(to_newline, Node::Text)(input)
 }
 
+fn parse_for_loop(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
+    Box::new(move |input| {
+        let (input, local) = preceded(
+            tag("- for "),
+            terminated(take_while(|c: char| c.is_alphanumeric()), tag(" in ")),
+        )(input)?;
+        let (input, selectors) = terminated(parse_selector, tag("\n"))(input)?;
+        let (input, children) = parse_nodes(depth + 1)(input)?;
+
+        Ok((
+            input,
+            Node::ForLoop {
+                local,
+                selectors,
+                children,
+            },
+        ))
+    })
+}
+
 fn parse_node_with_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
     Box::new(move |input| {
         let (input, tag) = terminated(parse_tag, tag(" "))(input)?;
@@ -177,6 +197,7 @@ fn parse_node(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
     Box::new(move |input| {
         let (input, _) = count(tag("  "), depth)(input)?;
         alt((
+            parse_for_loop(depth),
             parse_node_with_text(depth),
             parse_node_with_interpolated_text(depth),
             parse_node_without_text(depth),
@@ -376,6 +397,28 @@ mod tests {
                 .with_context("{\"title\": {\"primary\": \"Hello world\", \"secondary\": \"wow this works\"}}")
                 .to_html(),
             "<h1>Hello world</h1><h2>wow this works</h2>"
+        );
+    }
+
+    #[test]
+    fn for_loops() {
+        assert_eq!(
+            Socket::parse("%ul\n  - for value in values\n    %li= value")
+                .unwrap()
+                .with_context("{\"values\": [\"first\", \"second\", \"third\"]}")
+                .to_html(),
+            "<ul><li>first</li><li>second</li><li>third</li></ul>"
+        );
+    }
+
+    #[test]
+    fn for_loops_with_object() {
+        assert_eq!(
+            Socket::parse("%ul\n  - for value in values\n    %li= value.name")
+                .unwrap()
+                .with_context("{\"values\": [{\"name\": \"Jane\"}, {\"name\": \"John\"}]}")
+                .to_html(),
+            "<ul><li>Jane</li><li>John</li></ul>"
         );
     }
 
