@@ -1,4 +1,4 @@
-use super::{context::Context, Node};
+use super::{context::Context, Fragments, Node};
 
 pub enum Nodes<'a> {
     Fragment { nodes: Vec<Node<'a>> },
@@ -6,13 +6,13 @@ pub enum Nodes<'a> {
 }
 
 impl<'a> Nodes<'a> {
-    pub fn to_html(&self, context: &Context) -> String {
+    pub fn to_html(&self, context: &Context, fragments: &Fragments<'a>) -> String {
         match self {
-            Nodes::Fragment { nodes } => Self::nodes_to_html(nodes, context),
+            Nodes::Fragment { nodes } => Self::nodes_to_html(nodes, context, fragments),
             Nodes::Document { nodes } => format!(
                 "{}{}",
                 "<!DOCTYPE html>",
-                Self::nodes_to_html(nodes, context)
+                Self::nodes_to_html(nodes, context, fragments)
             ),
         }
     }
@@ -32,10 +32,10 @@ impl<'a> Nodes<'a> {
         Nodes::Document { nodes }
     }
 
-    fn nodes_to_html(nodes: &[Node], context: &Context) -> String {
+    fn nodes_to_html(nodes: &[Node], context: &Context, fragments: &Fragments<'a>) -> String {
         nodes
             .iter()
-            .map(|n| n.to_html(context))
+            .map(|n| n.to_html(context, fragments))
             .collect::<Vec<String>>()
             .join("")
     }

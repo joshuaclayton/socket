@@ -8,6 +8,7 @@ use nom::{
     sequence::{pair, preceded, terminated},
     IResult,
 };
+use std::path::PathBuf;
 
 pub fn parse(input: &str) -> IResult<&str, Nodes> {
     let (input, html_attributes) = opt(terminated(
@@ -60,6 +61,12 @@ fn parse_for_loop(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
             },
         ))
     })
+}
+
+fn parse_fragment(input: &str) -> IResult<&str, Node> {
+    let (input, path) = map(preceded(tag("- fragment "), to_newline), PathBuf::from)(input)?;
+
+    Ok((input, Node::Fragment { path }))
 }
 
 fn parse_node_with_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
@@ -198,6 +205,7 @@ fn parse_node(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
         let (input, _) = count(tag("  "), depth)(input)?;
         alt((
             parse_for_loop(depth),
+            parse_fragment,
             parse_node_with_text(depth),
             parse_node_with_interpolated_text(depth),
             parse_node_without_text(depth),
@@ -437,6 +445,26 @@ mod tests {
                     Selector::Key("nested"),
                 ]
             )
+        )
+    }
+
+    #[test]
+    fn fragments() {
+        use std::collections::HashMap;
+        use std::path::PathBuf;
+
+        let mut fragments: HashMap<PathBuf, String> = HashMap::new();
+        fragments.insert(PathBuf::from("foo/item.skt"), "%li= item.name".into());
+
+        assert_eq!(
+            Socket::parse(
+                "%ul\n  - for item in items\n    - fragment foo/item.skt\n    %li Separator"
+            )
+            .unwrap()
+            .with_fragments(&fragments)
+            .with_context("{\"items\": [{\"name\": \"Jane\"}, {\"name\": \"John\"}]}")
+            .to_html(),
+            "<ul><li>Jane</li><li>Separator</li><li>John</li><li>Separator</li></ul>",
         )
     }
 }

@@ -3,6 +3,7 @@ mod attributes;
 pub mod cli;
 pub mod context;
 pub mod flags;
+pub mod fragments;
 mod node;
 mod nodes;
 pub mod parser;

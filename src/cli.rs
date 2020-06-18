@@ -1,4 +1,4 @@
-use super::{flags::Flags, Socket};
+use super::{flags::Flags, fragments, Socket};
 use std::fs;
 use std::io::{self, Read};
 use std::path::PathBuf;
@@ -13,7 +13,13 @@ pub fn run() {
             if let Ok(mut parsed) = Socket::parse(&input) {
                 match context {
                     None => println!("{}", parsed.to_html()),
-                    Some(ctx) => println!("{}", parsed.with_context(&ctx).to_html()),
+                    Some(ctx) => println!(
+                        "{}",
+                        parsed
+                            .with_fragments(&fragments::new())
+                            .with_context(&ctx)
+                            .to_html()
+                    ),
                 }
             }
         }
