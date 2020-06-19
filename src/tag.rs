@@ -19,4 +19,11 @@ impl<'a> Tag<'a> {
     pub fn close_tag_html(&self) -> String {
         format!("</{}>", self.name)
     }
+
+    pub fn additional_markup(&self, styles: &Option<String>) -> String {
+        match (self.name, styles) {
+            ("head", Some(v)) => format!("<style>\n{}</style>", v),
+            _ => "".into(),
+        }
+    }
 }

@@ -23,14 +23,20 @@ pub enum Node<'a> {
 }
 
 impl<'a> Node<'a> {
-    pub fn to_html(&self, context: &Context, fragments: &Fragments<'a>) -> String {
+    pub fn to_html(
+        &self,
+        context: &Context,
+        fragments: &Fragments<'a>,
+        styles: &'a Option<String>,
+    ) -> String {
         match self {
             Node::Text(v) => v.to_string(),
             Node::InterpolatedText(v) => context.interpret(v),
             Node::Element { tag, children } => format!(
-                "{}{}{}",
+                "{}{}{}{}",
                 tag.open_tag_html(),
-                children.to_html(context, fragments),
+                children.to_html(context, fragments, styles),
+                tag.additional_markup(styles),
                 tag.close_tag_html()
             ),
             Node::ForLoop {
@@ -42,7 +48,11 @@ impl<'a> Node<'a> {
                     loopable
                         .iter()
                         .map(|looped_value| {
-                            children.to_html(&context.extend(local, looped_value), fragments)
+                            children.to_html(
+                                &context.extend(local, looped_value),
+                                fragments,
+                                styles,
+                            )
                         })
                         .collect::<Vec<String>>()
                         .join("")
@@ -52,7 +62,7 @@ impl<'a> Node<'a> {
             }
             Node::Fragment { path } => {
                 if let Some(nodes) = fragments.get(path) {
-                    nodes.to_html(context, fragments)
+                    nodes.to_html(context, fragments, styles)
                 } else {
                     "".into()
                 }

@@ -1,4 +1,4 @@
-use super::{flags::Flags, fragments, Socket};
+use super::{flags::Flags, fragments, styles, Socket};
 use std::fs;
 use std::io::{self, Read};
 use std::path::PathBuf;
@@ -18,6 +18,7 @@ pub fn run() {
                         parsed
                             .with_fragments(&fragments::new())
                             .with_context(&ctx)
+                            .with_styles(&styles::generate())
                             .to_html()
                     ),
                 }

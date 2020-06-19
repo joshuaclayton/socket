@@ -6,13 +6,18 @@ pub enum Nodes<'a> {
 }
 
 impl<'a> Nodes<'a> {
-    pub fn to_html(&self, context: &Context, fragments: &Fragments<'a>) -> String {
+    pub fn to_html(
+        &self,
+        context: &Context,
+        fragments: &Fragments<'a>,
+        styles: &'a Option<String>,
+    ) -> String {
         match self {
-            Nodes::Fragment { nodes } => Self::nodes_to_html(nodes, context, fragments),
+            Nodes::Fragment { nodes } => Self::nodes_to_html(nodes, context, fragments, styles),
             Nodes::Document { nodes } => format!(
                 "{}{}",
                 "<!DOCTYPE html>",
-                Self::nodes_to_html(nodes, context, fragments)
+                Self::nodes_to_html(nodes, context, fragments, styles)
             ),
         }
     }
@@ -32,10 +37,15 @@ impl<'a> Nodes<'a> {
         Nodes::Document { nodes }
     }
 
-    fn nodes_to_html(nodes: &[Node], context: &Context, fragments: &Fragments<'a>) -> String {
+    fn nodes_to_html(
+        nodes: &[Node],
+        context: &Context,
+        fragments: &Fragments<'a>,
+        styles: &'a Option<String>,
+    ) -> String {
         nodes
             .iter()
-            .map(|n| n.to_html(context, fragments))
+            .map(|n| n.to_html(context, fragments, styles))
             .collect::<Vec<String>>()
             .join("")
     }

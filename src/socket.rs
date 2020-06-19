@@ -8,6 +8,7 @@ pub struct Socket<'a> {
     nodes: Nodes<'a>,
     context: Context,
     fragments: Fragments<'a>,
+    styles: &'a Option<String>,
 }
 
 impl<'a> Socket<'a> {
@@ -19,11 +20,17 @@ impl<'a> Socket<'a> {
             nodes,
             context,
             fragments,
+            styles: &None,
         })
     }
 
     pub fn with_context(&mut self, context: &str) -> &mut Self {
         self.context = Context::load(context);
+        self
+    }
+
+    pub fn with_styles(&mut self, styles: &'a Option<String>) -> &mut Self {
+        self.styles = styles;
         self
     }
 
@@ -40,6 +47,7 @@ impl<'a> Socket<'a> {
     }
 
     pub fn to_html(&self) -> String {
-        self.nodes.to_html(&self.context, &self.fragments)
+        self.nodes
+            .to_html(&self.context, &self.fragments, &self.styles)
     }
 }

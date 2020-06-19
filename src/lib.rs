@@ -8,6 +8,7 @@ mod node;
 mod nodes;
 pub mod parser;
 mod socket;
+pub mod styles;
 mod tag;
 
 pub use crate::socket::*;
