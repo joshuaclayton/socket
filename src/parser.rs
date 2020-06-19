@@ -1,7 +1,7 @@
-use super::{context::Selector, Attribute, Node, Nodes, Tag};
+use super::{context::Selector, Attribute, AttributeValueComponent, Node, Nodes, Tag};
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_till, take_while},
+    bytes::complete::{tag, take_till, take_till1, take_while},
     character::complete::digit1,
     combinator::{map, map_res, opt, recognize},
     multi::{count, many0, many1, separated_list},
@@ -122,10 +122,48 @@ fn parse_attributes(input: &str) -> IResult<&str, Vec<Attribute>> {
     Ok((input, attributes))
 }
 
+fn wrapped_string(input: &str) -> IResult<&str, Vec<AttributeValueComponent>> {
+    let (input, base) = preceded(tag("\""), alt((raw_quoted, interpolated)))(input)?;
+    let (input, mut rest) = terminated(many0(alt((raw_quoted, interpolated))), tag("\""))(input)?;
+
+    rest.insert(0, base);
+
+    Ok((input, rest))
+}
+
+fn raw_quoted(input: &str) -> IResult<&str, AttributeValueComponent> {
+    map(
+        take_till1(|c: char| c == '\"' || c == '{'),
+        AttributeValueComponent::RawValue,
+    )(input)
+}
+
+fn raw_unwrapped(input: &str) -> IResult<&str, AttributeValueComponent> {
+    map(
+        take_till1(|c: char| c.is_whitespace() || c == '=' || c == ')' || c == '{'),
+        AttributeValueComponent::RawValue,
+    )(input)
+}
+
+fn interpolated(input: &str) -> IResult<&str, AttributeValueComponent> {
+    let parse_interpolated_selectors = preceded(tag("{"), terminated(parse_selector, tag("}")));
+    map(
+        parse_interpolated_selectors,
+        AttributeValueComponent::InterpolatedValue,
+    )(input)
+}
+
+fn unwrapped_string(input: &str) -> IResult<&str, Vec<AttributeValueComponent>> {
+    let (input, base) = alt((interpolated, raw_unwrapped))(input)?;
+    let (input, mut rest) = many0(alt((interpolated, raw_unwrapped)))(input)?;
+
+    rest.insert(0, base);
+
+    Ok((input, rest))
+}
+
 fn parse_custom_attributes(input: &str) -> IResult<&str, Vec<Attribute>> {
     let attribute_name = take_while(|c: char| c.is_alphanumeric() || c == '-' || c == '_');
-    let wrapped_string = terminated(preceded(tag("\""), take_till(|c| c == '\"')), tag("\""));
-    let unwrapped_string = take_till(|c: char| c.is_whitespace() || c == '=' || c == ')');
     let parse_pair = pair(
         terminated(attribute_name, tag("=")),
         alt((wrapped_string, unwrapped_string)),
@@ -222,6 +260,7 @@ pub fn to_newline(input: &str) -> IResult<&str, &str> {
 mod tests {
     use super::super::context::Selector;
     use super::super::Attribute;
+    use super::super::AttributeValueComponent;
     use super::super::Socket;
 
     #[test]
@@ -337,7 +376,7 @@ mod tests {
     }
 
     #[test]
-    fn unquoted_custom_attribut() {
+    fn unquoted_custom_attribute() {
         assert_eq!(
             Socket::parse("%img(src=example.png alt=\"What do you think?\")")
                 .unwrap()
@@ -368,9 +407,16 @@ mod tests {
 
     #[test]
     fn just_custom_attributes() {
+        fn raw_custom_attribute<'a>(value: &'a str) -> Vec<AttributeValueComponent<'a>> {
+            vec![AttributeValueComponent::RawValue(value)]
+        }
+
         assert_eq!(
-            super::parse_custom_attributes("(lang=en)").unwrap(),
-            ("", vec![Attribute::Custom("lang", "en")])
+            super::parse_custom_attributes("(lang=en)"),
+            Ok((
+                "",
+                vec![Attribute::Custom("lang", raw_custom_attribute("en"))]
+            ))
         );
 
         assert_eq!(
@@ -379,10 +425,79 @@ mod tests {
             (
                 "",
                 vec![
-                    Attribute::Custom("http-equiv", "x-ua-compatible"),
-                    Attribute::Custom("content", "ie=edge")
+                    Attribute::Custom("http-equiv", raw_custom_attribute("x-ua-compatible")),
+                    Attribute::Custom("content", raw_custom_attribute("ie=edge"))
                 ]
             )
+        );
+    }
+
+    #[test]
+    fn single_unwrapped_string() {
+        assert_eq!(
+            ("", vec![AttributeValueComponent::RawValue("foo")]),
+            super::unwrapped_string("foo").unwrap()
+        );
+
+        assert_eq!(
+            (
+                "",
+                vec![AttributeValueComponent::InterpolatedValue(vec![
+                    Selector::Key("foo"),
+                    Selector::Key("bar")
+                ])]
+            ),
+            super::unwrapped_string("{foo.bar}").unwrap()
+        );
+
+        assert_eq!(
+            (
+                "",
+                vec![
+                    AttributeValueComponent::RawValue("starting"),
+                    AttributeValueComponent::InterpolatedValue(vec![
+                        Selector::Key("foo"),
+                        Selector::Key("bar")
+                    ])
+                ]
+            ),
+            super::unwrapped_string("starting{foo.bar}").unwrap()
+        );
+    }
+
+    #[test]
+    fn single_wrapped_string() {
+        assert_eq!(
+            Ok(("", vec![AttributeValueComponent::RawValue("foo")])),
+            super::wrapped_string("\"foo\"")
+        );
+    }
+
+    #[test]
+    fn single_wrapped_interpolation() {
+        assert_eq!(
+            (
+                "",
+                vec![AttributeValueComponent::InterpolatedValue(vec![
+                    Selector::Key("foo"),
+                    Selector::Key("bar")
+                ])]
+            ),
+            super::wrapped_string("\"{foo.bar}\"").unwrap()
+        );
+
+        assert_eq!(
+            (
+                "",
+                vec![
+                    AttributeValueComponent::RawValue("starting"),
+                    AttributeValueComponent::InterpolatedValue(vec![
+                        Selector::Key("foo"),
+                        Selector::Key("bar")
+                    ])
+                ]
+            ),
+            super::wrapped_string("\"starting{foo.bar}\"").unwrap()
         );
     }
 
@@ -405,6 +520,17 @@ mod tests {
                 .with_context("{\"title\": {\"primary\": \"Hello world\", \"secondary\": \"wow this works\"}}")
                 .to_html(),
             "<h1>Hello world</h1><h2>wow this works</h2>"
+        );
+    }
+
+    #[test]
+    fn attribute_interpolation() {
+        assert_eq!(
+            Socket::parse("%a(href=mailto:{contact.email})= contact.name")
+                .unwrap()
+                .with_context("{\"contact\": {\"email\": \"person@example.com\", \"name\": \"Person's name\"}}")
+                .to_html(),
+            "<a href=\"mailto:person@example.com\">Person's name</a>"
         );
     }
 

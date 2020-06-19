@@ -1,13 +1,13 @@
-use super::Attribute;
+use super::{context::Context, Attribute, AttributeValueComponent};
 
 pub struct Attributes<'a> {
     id: Option<&'a str>,
     classes: Vec<&'a str>,
-    custom: Vec<(&'a str, &'a str)>,
+    custom: Vec<(&'a str, Vec<AttributeValueComponent<'a>>)>,
 }
 
 impl<'a> Attributes<'a> {
-    pub fn to_html(&self) -> Vec<String> {
+    pub fn to_html(&self, context: &Context) -> Vec<String> {
         let mut results = vec![];
 
         if let Some(id) = self.id {
@@ -19,18 +19,35 @@ impl<'a> Attributes<'a> {
         }
 
         for (k, v) in self.custom.iter() {
-            results.push(format!("{}=\"{}\"", k, v));
+            results.push(format!(
+                "{}=\"{}\"",
+                k,
+                evaluate_attribute_value_components(&v, context)
+            ));
         }
 
         results
     }
 }
 
+fn evaluate_attribute_value_components<'a>(
+    values: &[AttributeValueComponent<'a>],
+    context: &Context,
+) -> String {
+    values
+        .iter()
+        .map(|v| match v {
+            AttributeValueComponent::RawValue(value) => value.to_string(),
+            AttributeValueComponent::InterpolatedValue(values) => context.interpret(values),
+        })
+        .collect()
+}
+
 impl<'a> From<Vec<Attribute<'a>>> for Attributes<'a> {
     fn from(attributes: Vec<Attribute<'a>>) -> Self {
         let id = attributes
             .iter()
-            .filter_map(|&a| match a {
+            .filter_map(|a| match *a {
                 Attribute::Id(v) => Some(v),
                 _ => None,
             })
@@ -38,7 +55,7 @@ impl<'a> From<Vec<Attribute<'a>>> for Attributes<'a> {
 
         let classes = attributes
             .iter()
-            .filter_map(|&a| match a {
+            .filter_map(|a| match *a {
                 Attribute::Class(v) => Some(v),
                 _ => None,
             })
@@ -46,8 +63,8 @@ impl<'a> From<Vec<Attribute<'a>>> for Attributes<'a> {
 
         let custom = attributes
             .iter()
-            .filter_map(|&a| match a {
-                Attribute::Custom(k, v) => Some((k, v)),
+            .filter_map(|a| match a {
+                Attribute::Custom(k, v) => Some((k.clone(), v.clone())),
                 _ => None,
             })
             .collect();

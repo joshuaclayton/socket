@@ -34,7 +34,7 @@ impl<'a> Node<'a> {
             Node::InterpolatedText(v) => context.interpret(v),
             Node::Element { tag, children } => format!(
                 "{}{}{}{}",
-                tag.open_tag_html(),
+                tag.open_tag_html(context),
                 children.to_html(context, fragments, styles),
                 tag.additional_markup(styles),
                 tag.close_tag_html()

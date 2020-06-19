@@ -1,4 +1,4 @@
-use super::{Attribute, Attributes};
+use super::{context::Context, Attribute, Attributes};
 
 pub struct Tag<'a> {
     pub name: &'a str,
@@ -6,13 +6,12 @@ pub struct Tag<'a> {
 }
 
 impl<'a> Tag<'a> {
-    pub fn open_tag_html(&self) -> String {
+    pub fn open_tag_html(&self, context: &Context) -> String {
         let attributes: Attributes = self.attributes.clone().into();
 
-        if attributes.to_html().is_empty() {
-            format!("<{}>", self.name)
-        } else {
-            format!("<{} {}>", self.name, attributes.to_html().join(" "))
+        match attributes.to_html(context).as_slice() {
+            [] => format!("<{}>", self.name),
+            attrs => format!("<{} {}>", self.name, attrs.join(" ")),
         }
     }
 

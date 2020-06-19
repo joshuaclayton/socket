@@ -5,7 +5,7 @@ pub struct Context {
     payload: serde_json::Value,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Selector<'a> {
     Key(&'a str),
     Index(usize),
