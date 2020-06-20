@@ -1,18 +1,19 @@
-use super::{context::Selector, Attribute, AttributeValueComponent, Node, Nodes, Tag};
+mod custom_attributes;
+mod selector;
+use super::{Attribute, Node, Nodes, Tag};
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_till, take_till1, take_while},
-    character::complete::digit1,
-    combinator::{map, map_res, opt, recognize},
+    bytes::complete::{tag, take_till, take_while},
+    combinator::{map, opt},
     multi::{count, many0, many1, separated_list},
-    sequence::{pair, preceded, terminated},
+    sequence::{preceded, terminated},
     IResult,
 };
 use std::path::PathBuf;
 
 pub fn parse(input: &str) -> IResult<&str, Nodes> {
     let (input, html_attributes) = opt(terminated(
-        preceded(tag("!HTML"), opt(parse_custom_attributes)),
+        preceded(tag("!HTML"), opt(custom_attributes::parse)),
         tag("\n"),
     ))(input)?;
     let (input, children) = parse_nodes(0)(input)?;
@@ -49,7 +50,7 @@ fn parse_for_loop(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
             tag("- for "),
             terminated(take_while(|c: char| c.is_alphanumeric()), tag(" in ")),
         )(input)?;
-        let (input, selectors) = terminated(parse_selector, tag("\n"))(input)?;
+        let (input, selectors) = terminated(selector::parse, tag("\n"))(input)?;
         let (input, children) = parse_nodes(depth + 1)(input)?;
 
         Ok((
@@ -83,7 +84,7 @@ fn parse_node_with_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>
 fn parse_node_with_interpolated_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
     Box::new(move |input| {
         let (input, tag) = terminated(parse_tag, tag("= "))(input)?;
-        let (input, contents) = map(parse_selector, Node::InterpolatedText)(input)?;
+        let (input, contents) = map(selector::parse, Node::InterpolatedText)(input)?;
         let (input, mut children) = parse_nodes(depth + 1)(input)?;
         children.prepend(contents);
 
@@ -103,7 +104,7 @@ fn parse_node_without_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, No
 fn parse_explicit_tag(input: &str) -> IResult<&str, Tag> {
     let (input, name) = preceded(tag("%"), take_while(|c: char| c.is_alphanumeric()))(input)?;
     let (input, mut attributes) = map(opt(parse_attributes), |v| v.unwrap_or(vec![]))(input)?;
-    let (input, custom_attributes) = opt(parse_custom_attributes)(input)?;
+    let (input, custom_attributes) = opt(custom_attributes::parse)(input)?;
 
     if let Some(customs) = custom_attributes {
         attributes.extend(customs);
@@ -122,104 +123,10 @@ fn parse_attributes(input: &str) -> IResult<&str, Vec<Attribute>> {
     Ok((input, attributes))
 }
 
-fn wrapped_string(input: &str) -> IResult<&str, Vec<AttributeValueComponent>> {
-    let (input, base) = preceded(tag("\""), alt((raw_quoted, interpolated)))(input)?;
-    let (input, mut rest) = terminated(many0(alt((raw_quoted, interpolated))), tag("\""))(input)?;
-
-    rest.insert(0, base);
-
-    Ok((input, rest))
-}
-
-fn raw_quoted(input: &str) -> IResult<&str, AttributeValueComponent> {
-    map(
-        take_till1(|c: char| c == '\"' || c == '{'),
-        AttributeValueComponent::RawValue,
-    )(input)
-}
-
-fn raw_unwrapped(input: &str) -> IResult<&str, AttributeValueComponent> {
-    map(
-        take_till1(|c: char| c.is_whitespace() || c == '=' || c == ')' || c == '{'),
-        AttributeValueComponent::RawValue,
-    )(input)
-}
-
-fn interpolated(input: &str) -> IResult<&str, AttributeValueComponent> {
-    let parse_interpolated_selectors = preceded(tag("{"), terminated(parse_selector, tag("}")));
-    map(
-        parse_interpolated_selectors,
-        AttributeValueComponent::InterpolatedValue,
-    )(input)
-}
-
-fn unwrapped_string(input: &str) -> IResult<&str, Vec<AttributeValueComponent>> {
-    let (input, base) = alt((interpolated, raw_unwrapped))(input)?;
-    let (input, mut rest) = many0(alt((interpolated, raw_unwrapped)))(input)?;
-
-    rest.insert(0, base);
-
-    Ok((input, rest))
-}
-
-fn parse_custom_attributes(input: &str) -> IResult<&str, Vec<Attribute>> {
-    let attribute_name = take_while(|c: char| c.is_alphanumeric() || c == '-' || c == '_');
-    let parse_pair = pair(
-        terminated(attribute_name, tag("=")),
-        alt((wrapped_string, unwrapped_string)),
-    );
-    let parse_attribute = map(parse_pair, |(k, v)| Attribute::Custom(k, v));
-
-    preceded(
-        tag("("),
-        terminated(separated_list(tag(" "), parse_attribute), tag(")")),
-    )(input)
-}
-
-fn parse_usize(input: &str) -> IResult<&str, usize> {
-    map_res(recognize(digit1), str::parse)(input)
-}
-
-fn parse_selector_object_index(input: &str) -> IResult<&str, Selector> {
-    map(parse_usize, Selector::Index)(input)
-}
-
-fn parse_selector_array_index(input: &str) -> IResult<&str, Selector> {
-    preceded(tag("["), terminated(parse_selector_object_index, tag("]")))(input)
-}
-
-fn parse_selector_key(input: &str) -> IResult<&str, Selector> {
-    map(take_while(|c: char| c.is_alphanumeric()), Selector::Key)(input)
-}
-
-fn first_selector(input: &str) -> IResult<&str, Selector> {
-    alt((
-        parse_selector_object_index,
-        parse_selector_array_index,
-        parse_selector_key,
-    ))(input)
-}
-
-fn subsequent_selector(input: &str) -> IResult<&str, Selector> {
-    alt((
-        preceded(tag("."), parse_selector_object_index),
-        parse_selector_array_index,
-        preceded(tag("."), parse_selector_key),
-    ))(input)
-}
-
-fn parse_selector(input: &str) -> IResult<&str, Vec<Selector>> {
-    let (input, first) = first_selector(input)?;
-    let (input, mut selectors) = many0(subsequent_selector)(input)?;
-
-    selectors.insert(0, first);
-    Ok((input, selectors))
-}
-
 fn parse_implicit_tag(input: &str) -> IResult<&str, Tag> {
     let (input, mut attributes) = parse_attributes(input)?;
 
-    let (input, custom_attributes) = opt(parse_custom_attributes)(input)?;
+    let (input, custom_attributes) = opt(custom_attributes::parse)(input)?;
 
     if let Some(customs) = custom_attributes {
         attributes.extend(customs);
@@ -258,9 +165,6 @@ pub fn to_newline(input: &str) -> IResult<&str, &str> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::context::Selector;
-    use super::super::Attribute;
-    use super::super::AttributeValueComponent;
     use super::super::Socket;
 
     #[test]
@@ -406,102 +310,6 @@ mod tests {
     }
 
     #[test]
-    fn just_custom_attributes() {
-        fn raw_custom_attribute<'a>(value: &'a str) -> Vec<AttributeValueComponent<'a>> {
-            vec![AttributeValueComponent::RawValue(value)]
-        }
-
-        assert_eq!(
-            super::parse_custom_attributes("(lang=en)"),
-            Ok((
-                "",
-                vec![Attribute::Custom("lang", raw_custom_attribute("en"))]
-            ))
-        );
-
-        assert_eq!(
-            super::parse_custom_attributes("(http-equiv=x-ua-compatible content=\"ie=edge\")")
-                .unwrap(),
-            (
-                "",
-                vec![
-                    Attribute::Custom("http-equiv", raw_custom_attribute("x-ua-compatible")),
-                    Attribute::Custom("content", raw_custom_attribute("ie=edge"))
-                ]
-            )
-        );
-    }
-
-    #[test]
-    fn single_unwrapped_string() {
-        assert_eq!(
-            ("", vec![AttributeValueComponent::RawValue("foo")]),
-            super::unwrapped_string("foo").unwrap()
-        );
-
-        assert_eq!(
-            (
-                "",
-                vec![AttributeValueComponent::InterpolatedValue(vec![
-                    Selector::Key("foo"),
-                    Selector::Key("bar")
-                ])]
-            ),
-            super::unwrapped_string("{foo.bar}").unwrap()
-        );
-
-        assert_eq!(
-            (
-                "",
-                vec![
-                    AttributeValueComponent::RawValue("starting"),
-                    AttributeValueComponent::InterpolatedValue(vec![
-                        Selector::Key("foo"),
-                        Selector::Key("bar")
-                    ])
-                ]
-            ),
-            super::unwrapped_string("starting{foo.bar}").unwrap()
-        );
-    }
-
-    #[test]
-    fn single_wrapped_string() {
-        assert_eq!(
-            Ok(("", vec![AttributeValueComponent::RawValue("foo")])),
-            super::wrapped_string("\"foo\"")
-        );
-    }
-
-    #[test]
-    fn single_wrapped_interpolation() {
-        assert_eq!(
-            (
-                "",
-                vec![AttributeValueComponent::InterpolatedValue(vec![
-                    Selector::Key("foo"),
-                    Selector::Key("bar")
-                ])]
-            ),
-            super::wrapped_string("\"{foo.bar}\"").unwrap()
-        );
-
-        assert_eq!(
-            (
-                "",
-                vec![
-                    AttributeValueComponent::RawValue("starting"),
-                    AttributeValueComponent::InterpolatedValue(vec![
-                        Selector::Key("foo"),
-                        Selector::Key("bar")
-                    ])
-                ]
-            ),
-            super::wrapped_string("\"starting{foo.bar}\"").unwrap()
-        );
-    }
-
-    #[test]
     fn simple_interpolation() {
         assert_eq!(
             Socket::parse("%h1= title")
@@ -554,24 +362,6 @@ mod tests {
                 .to_html(),
             "<ul><li>Jane</li><li>John</li></ul>"
         );
-    }
-
-    #[test]
-    fn selector_parser() {
-        assert_eq!(
-            super::parse_selector("foo.bar[0].one.1.nested").unwrap(),
-            (
-                "",
-                vec![
-                    Selector::Key("foo"),
-                    Selector::Key("bar"),
-                    Selector::Index(0),
-                    Selector::Key("one"),
-                    Selector::Index(1),
-                    Selector::Key("nested"),
-                ]
-            )
-        )
     }
 
     #[test]
