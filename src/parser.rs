@@ -1,11 +1,13 @@
 mod custom_attributes;
 mod selector;
+mod tag;
+
 use super::{Attribute, Node, Nodes, Tag};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_till, take_while},
     combinator::{map, opt},
-    multi::{count, many0, many1, separated_list},
+    multi::{count, many0, separated_list},
     sequence::{preceded, terminated},
     IResult,
 };
@@ -72,7 +74,7 @@ fn parse_fragment(input: &str) -> IResult<&str, Node> {
 
 fn parse_node_with_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
     Box::new(move |input| {
-        let (input, tag) = terminated(parse_tag, tag(" "))(input)?;
+        let (input, tag) = terminated(tag::parse, tag(" "))(input)?;
         let (input, contents) = map(to_newline, Node::Text)(input)?;
         let (input, mut children) = parse_nodes(depth + 1)(input)?;
         children.prepend(contents);
@@ -83,7 +85,7 @@ fn parse_node_with_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>
 
 fn parse_node_with_interpolated_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
     Box::new(move |input| {
-        let (input, tag) = terminated(parse_tag, tag("= "))(input)?;
+        let (input, tag) = terminated(tag::parse, tag("= "))(input)?;
         let (input, contents) = map(selector::parse, Node::InterpolatedText)(input)?;
         let (input, mut children) = parse_nodes(depth + 1)(input)?;
         children.prepend(contents);
@@ -94,55 +96,11 @@ fn parse_node_with_interpolated_text(depth: usize) -> Box<dyn Fn(&str) -> IResul
 
 fn parse_node_without_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
     Box::new(move |input| {
-        let (input, tag) = parse_tag(input)?;
+        let (input, tag) = tag::parse(input)?;
         let (input, children) = parse_nodes(depth + 1)(input)?;
 
         Ok((input, Node::Element { tag, children }))
     })
-}
-
-fn parse_explicit_tag(input: &str) -> IResult<&str, Tag> {
-    let (input, name) = preceded(tag("%"), take_while(|c: char| c.is_alphanumeric()))(input)?;
-    let (input, mut attributes) = map(opt(parse_attributes), |v| v.unwrap_or(vec![]))(input)?;
-    let (input, custom_attributes) = opt(custom_attributes::parse)(input)?;
-
-    if let Some(customs) = custom_attributes {
-        attributes.extend(customs);
-    }
-    Ok((input, Tag { name, attributes }))
-}
-
-fn parse_html_class(input: &str) -> IResult<&str, &str> {
-    take_while(|c: char| c.is_alphanumeric() || c == '-' || c == '_')(input)
-}
-
-fn parse_attributes(input: &str) -> IResult<&str, Vec<Attribute>> {
-    let parse_class = map(preceded(tag("."), parse_html_class), Attribute::Class);
-    let parse_id = map(preceded(tag("#"), parse_html_class), Attribute::Id);
-    let (input, attributes) = many1(alt((parse_class, parse_id)))(input)?;
-    Ok((input, attributes))
-}
-
-fn parse_implicit_tag(input: &str) -> IResult<&str, Tag> {
-    let (input, mut attributes) = parse_attributes(input)?;
-
-    let (input, custom_attributes) = opt(custom_attributes::parse)(input)?;
-
-    if let Some(customs) = custom_attributes {
-        attributes.extend(customs);
-    }
-
-    Ok((
-        input,
-        Tag {
-            name: "div",
-            attributes,
-        },
-    ))
-}
-
-fn parse_tag(input: &str) -> IResult<&str, Tag> {
-    alt((parse_explicit_tag, parse_implicit_tag))(input)
 }
 
 fn parse_node(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
