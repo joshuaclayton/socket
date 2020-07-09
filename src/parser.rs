@@ -18,7 +18,7 @@ pub fn parse(input: &str) -> IResult<&str, Nodes> {
         preceded(tag("!HTML"), opt(custom_attributes::parse)),
         tag("\n"),
     ))(input)?;
-    let (input, children) = parse_nodes(0)(input)?;
+    let (input, children) = alt((parse_fragment_subclass, parse_nodes(0)))(input)?;
 
     match html_attributes {
         None => Ok((input, children)),
@@ -72,6 +72,19 @@ fn parse_fragment(input: &str) -> IResult<&str, Node> {
     Ok((input, Node::Fragment { path }))
 }
 
+fn parse_extends(input: &str) -> IResult<&str, PathBuf> {
+    map(preceded(tag("- extends "), to_newline), PathBuf::from)(input)
+}
+
+fn parse_block_contents(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
+    Box::new(move |input| {
+        let (input, name) = preceded(tag("- block "), to_newline)(input)?;
+        let (input, children) = parse_nodes(depth + 1)(input)?;
+
+        Ok((input, Node::Block { name, children }))
+    })
+}
+
 fn parse_node_with_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
     Box::new(move |input| {
         let (input, tag) = terminated(tag::parse, tag(" "))(input)?;
@@ -83,10 +96,18 @@ fn parse_node_with_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>
     })
 }
 
+fn parse_interpolated_text(input: &str) -> IResult<&str, Node> {
+    map(selector::parse, Node::InterpolatedText)(input)
+}
+
+fn parse_block_value(input: &str) -> IResult<&str, Node> {
+    map(preceded(tag("block "), to_newline), Node::BlockValue)(input)
+}
+
 fn parse_node_with_interpolated_text(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
     Box::new(move |input| {
         let (input, tag) = terminated(tag::parse, tag("= "))(input)?;
-        let (input, contents) = map(selector::parse, Node::InterpolatedText)(input)?;
+        let (input, contents) = alt((parse_block_value, parse_interpolated_text))(input)?;
         let (input, mut children) = parse_nodes(depth + 1)(input)?;
         children.prepend(contents);
 
@@ -108,6 +129,7 @@ fn parse_node(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
         let (input, _) = count(tag("  "), depth)(input)?;
         alt((
             parse_for_loop(depth),
+            parse_block_contents(depth),
             parse_fragment,
             parse_node_with_text(depth),
             parse_node_with_interpolated_text(depth),
@@ -115,6 +137,17 @@ fn parse_node(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
             parse_text_node,
         ))(input)
     })
+}
+
+fn parse_fragment_subclass(input: &str) -> IResult<&str, Nodes> {
+    let (input, layout) = terminated(parse_extends, tag("\n"))(input)?;
+    let (input, blocks) = separated_list(
+        tag("\n"),
+        preceded(many0(tag("\n")), parse_block_contents(0)),
+    )(input)?;
+    let (input, _) = many0(tag("\n"))(input)?;
+
+    Ok((input, Nodes::new_fragment_subclass(layout, blocks)))
 }
 
 pub fn to_newline(input: &str) -> IResult<&str, &str> {
@@ -339,6 +372,31 @@ mod tests {
             .with_context("{\"items\": [{\"name\": \"Jane\"}, {\"name\": \"John\"}]}")
             .to_html(),
             "<ul><li>Jane</li><li>Separator</li><li>John</li><li>Separator</li></ul>",
+        )
+    }
+
+    #[test]
+    fn extends_and_blocks() {
+        use std::collections::HashMap;
+        use std::path::PathBuf;
+
+        let mut fragments: HashMap<PathBuf, String> = HashMap::new();
+        fragments.insert(
+            PathBuf::from("foo/page.skt"),
+            ".foo\n  %h2= block page-header\n  - block contents".into(),
+        );
+
+        fragments.insert(
+            PathBuf::from("foo/included.skt"),
+            "- extends foo/page.skt\n- block page-header\n  Hello world\n\n\n\n- block contents\n  %p Hi\n  %p Hello\n\n\n".into(),
+        );
+
+        assert_eq!(
+            Socket::parse("%section\n  - fragment foo/included.skt")
+                .unwrap()
+                .with_fragments(&fragments)
+                .to_html(),
+            "<section><div class=\"foo\"><h2>Hello world</h2><p>Hi</p><p>Hello</p></div></section>",
         )
     }
 }

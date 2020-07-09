@@ -47,7 +47,11 @@ impl<'a> Socket<'a> {
     }
 
     pub fn to_html(&self) -> String {
-        self.nodes
-            .to_html(&self.context, &self.fragments, &self.styles)
+        self.nodes.to_html(
+            &self.context,
+            &self.fragments,
+            &HashMap::new(),
+            &self.styles,
+        )
     }
 }
