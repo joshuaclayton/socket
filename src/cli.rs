@@ -12,16 +12,25 @@ pub fn run() {
         Ok(input) => {
             if let Ok(mut parsed) = Socket::parse(&input) {
                 match context {
-                    None => println!("{}", parsed.to_html()),
+                    None => println!(
+                        "{}",
+                        parsed
+                            .with_fragments(&fragments::new())
+                            .with_styles(&styles::generate())
+                            .to_html()
+                    ),
                     Some(ctx) => println!(
                         "{}",
                         parsed
                             .with_fragments(&fragments::new())
-                            .with_context(&ctx)
                             .with_styles(&styles::generate())
+                            .with_context(&ctx)
                             .to_html()
                     ),
                 }
+            } else {
+                eprintln!("Unable to parse input");
+                std::process::exit(1)
             }
         }
         Err(e) => {
