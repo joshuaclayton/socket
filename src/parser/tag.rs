@@ -49,5 +49,15 @@ fn parse_attributes(input: &str) -> IResult<&str, Vec<Attribute>> {
 }
 
 fn parse_html_class(input: &str) -> IResult<&str, &str> {
-    take_while(|c: char| c.is_alphanumeric() || c == '-' || c == '_')(input)
+    take_while(|c: char| c.is_alphanumeric() || c == '-' || c == '_' || c == '/')(input)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tailwind_class() {
+        assert_eq!(parse_html_class("w-3/4").unwrap(), ("", "w-3/4"));
+    }
 }
