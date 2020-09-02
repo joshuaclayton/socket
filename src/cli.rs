@@ -7,6 +7,7 @@ use structopt::StructOpt;
 pub fn run() {
     let flags = Flags::from_args();
     let context = flags.context.and_then(|v| read_file(&v).ok());
+    let scss_entrypoint = PathBuf::from("styles/app.scss");
 
     match read_from_stdin() {
         Ok(input) => {
@@ -16,16 +17,18 @@ pub fn run() {
                         "{}",
                         parsed
                             .with_fragments(&fragments::new())
-                            .with_styles(&styles::generate())
-                            .to_html()
+                            .with_styles(styles::generate(scss_entrypoint))
+                            .map(|v| v.to_html())
+                            .unwrap_or("".to_string())
                     ),
                     Some(ctx) => println!(
                         "{}",
                         parsed
                             .with_fragments(&fragments::new())
-                            .with_styles(&styles::generate())
-                            .with_context(&ctx)
-                            .to_html()
+                            .with_styles(styles::generate(scss_entrypoint))
+                            .and_then(|v| v.with_context(&ctx))
+                            .map(|v| v.to_html())
+                            .unwrap_or("".to_string())
                     ),
                 }
             } else {

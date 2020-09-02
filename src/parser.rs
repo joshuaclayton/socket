@@ -306,7 +306,8 @@ mod tests {
             Socket::parse("%h1= title")
                 .unwrap()
                 .with_context("{\"title\": \"Hello world\"}")
-                .to_html(),
+                .map(|v| v.to_html())
+                .unwrap(),
             "<h1>Hello world</h1>"
         );
     }
@@ -317,7 +318,8 @@ mod tests {
             Socket::parse("%h1= title.primary\n%h2= title.secondary")
                 .unwrap()
                 .with_context("{\"title\": {\"primary\": \"Hello world\", \"secondary\": \"wow this works\"}}")
-                .to_html(),
+                .map(|v| v.to_html())
+                .unwrap(),
             "<h1>Hello world</h1><h2>wow this works</h2>"
         );
     }
@@ -328,7 +330,8 @@ mod tests {
             Socket::parse("%a(href=mailto:{contact.email})= contact.name")
                 .unwrap()
                 .with_context("{\"contact\": {\"email\": \"person@example.com\", \"name\": \"Person's name\"}}")
-                .to_html(),
+                .map(|v| v.to_html())
+                .unwrap(),
             "<a href=\"mailto:person@example.com\">Person's name</a>"
         );
     }
@@ -339,7 +342,8 @@ mod tests {
             Socket::parse("%ul\n  - for value in values\n    %li= value")
                 .unwrap()
                 .with_context("{\"values\": [\"first\", \"second\", \"third\"]}")
-                .to_html(),
+                .map(|v| v.to_html())
+                .unwrap(),
             "<ul><li>first</li><li>second</li><li>third</li></ul>"
         );
     }
@@ -350,7 +354,8 @@ mod tests {
             Socket::parse("%ul\n  - for value in values\n    %li= value.name")
                 .unwrap()
                 .with_context("{\"values\": [{\"name\": \"Jane\"}, {\"name\": \"John\"}]}")
-                .to_html(),
+                .map(|v| v.to_html())
+                .unwrap(),
             "<ul><li>Jane</li><li>John</li></ul>"
         );
     }
@@ -370,7 +375,8 @@ mod tests {
             .unwrap()
             .with_fragments(&fragments)
             .with_context("{\"items\": [{\"name\": \"Jane\"}, {\"name\": \"John\"}]}")
-            .to_html(),
+            .map(|v| v.to_html())
+            .unwrap(),
             "<ul><li>Jane</li><li>Separator</li><li>John</li><li>Separator</li></ul>",
         )
     }

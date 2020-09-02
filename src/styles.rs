@@ -1,10 +1,12 @@
 use sass_rs::{Options as SassOptions, OutputStyle};
-use std::path::PathBuf;
+use std::path::Path;
 
-pub fn generate() -> Option<String> {
+#[derive(Debug)]
+pub struct SassCompileError(String);
+
+pub fn generate<P: AsRef<Path>>(path: P) -> Result<String, SassCompileError> {
     let mut options = SassOptions::default();
     options.output_style = OutputStyle::Compressed;
-    let path = PathBuf::from("styles/app.scss");
 
-    sass_rs::compile_file(path, options).ok()
+    sass_rs::compile_file(path, options).map_err(SassCompileError)
 }

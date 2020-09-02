@@ -5,6 +5,9 @@ pub struct Context {
     payload: serde_json::Value,
 }
 
+#[derive(Debug)]
+pub struct ContextError(serde_json::Error);
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Selector<'a> {
     Key(&'a str),
@@ -17,9 +20,9 @@ impl Context {
         Context { payload }
     }
 
-    pub fn load(input: &str) -> Self {
-        let payload = serde_json::from_str(input).unwrap_or(serde_json::Value::Null);
-        Context { payload }
+    pub fn load(input: &str) -> Result<Self, ContextError> {
+        let payload = serde_json::from_str(input).map_err(ContextError)?;
+        Ok(Context { payload })
     }
 
     pub fn interpret(&self, value: &[Selector]) -> String {
