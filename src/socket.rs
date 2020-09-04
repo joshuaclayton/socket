@@ -64,13 +64,20 @@ impl<'a> Socket<'a> {
         })
     }
 
-    pub fn with_context(&mut self, context: &str) -> Result<&mut Self, SocketError> {
-        match Context::load(context) {
-            Ok(v) => {
-                self.context = v;
-                Ok(self)
+    pub fn with_context(
+        &mut self,
+        context: Option<Result<Context, ContextError>>,
+    ) -> Result<&mut Self, SocketError> {
+        if let Some(context_) = context {
+            match context_ {
+                Ok(v) => {
+                    self.context = v;
+                    Ok(self)
+                }
+                Err(e) => Err(SocketError::ContextError(e)),
             }
-            Err(e) => Err(SocketError::ContextError(e)),
+        } else {
+            Ok(self)
         }
     }
 

@@ -1,4 +1,6 @@
 use serde_json::Value;
+use std::fs;
+use std::path::PathBuf;
 use std::slice::Iter;
 
 pub struct Context {
@@ -6,7 +8,10 @@ pub struct Context {
 }
 
 #[derive(Debug)]
-pub struct ContextError(serde_json::Error);
+pub enum ContextError {
+    JsonError(serde_json::Error),
+    ContextIOError(std::io::Error),
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Selector<'a> {
@@ -20,8 +25,14 @@ impl Context {
         Context { payload }
     }
 
+    pub fn from_file(file_path: PathBuf) -> Result<Self, ContextError> {
+        fs::read_to_string(&file_path)
+            .map_err(ContextError::ContextIOError)
+            .and_then(|v| Self::load(&v))
+    }
+
     pub fn load(input: &str) -> Result<Self, ContextError> {
-        let payload = serde_json::from_str(input).map_err(ContextError)?;
+        let payload = serde_json::from_str(input).map_err(ContextError::JsonError)?;
         Ok(Context { payload })
     }
 

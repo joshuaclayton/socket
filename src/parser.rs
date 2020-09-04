@@ -156,7 +156,7 @@ pub fn to_newline(input: &str) -> IResult<&str, &str> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::Socket;
+    use super::super::{context::*, Socket};
 
     #[test]
     fn simple_tag() {
@@ -305,7 +305,7 @@ mod tests {
         assert_eq!(
             Socket::parse("%h1= title")
                 .unwrap()
-                .with_context("{\"title\": \"Hello world\"}")
+                .with_context(build_context("{\"title\": \"Hello world\"}"))
                 .map(|v| v.to_html())
                 .unwrap(),
             "<h1>Hello world</h1>"
@@ -317,7 +317,7 @@ mod tests {
         assert_eq!(
             Socket::parse("%h1= title.primary\n%h2= title.secondary")
                 .unwrap()
-                .with_context("{\"title\": {\"primary\": \"Hello world\", \"secondary\": \"wow this works\"}}")
+                .with_context(build_context("{\"title\": {\"primary\": \"Hello world\", \"secondary\": \"wow this works\"}}"))
                 .map(|v| v.to_html())
                 .unwrap(),
             "<h1>Hello world</h1><h2>wow this works</h2>"
@@ -329,7 +329,7 @@ mod tests {
         assert_eq!(
             Socket::parse("%a(href=mailto:{contact.email})= contact.name")
                 .unwrap()
-                .with_context("{\"contact\": {\"email\": \"person@example.com\", \"name\": \"Person's name\"}}")
+                .with_context(build_context("{\"contact\": {\"email\": \"person@example.com\", \"name\": \"Person's name\"}}"))
                 .map(|v| v.to_html())
                 .unwrap(),
             "<a href=\"mailto:person@example.com\">Person's name</a>"
@@ -341,7 +341,9 @@ mod tests {
         assert_eq!(
             Socket::parse("%ul\n  - for value in values\n    %li= value")
                 .unwrap()
-                .with_context("{\"values\": [\"first\", \"second\", \"third\"]}")
+                .with_context(build_context(
+                    "{\"values\": [\"first\", \"second\", \"third\"]}"
+                ))
                 .map(|v| v.to_html())
                 .unwrap(),
             "<ul><li>first</li><li>second</li><li>third</li></ul>"
@@ -353,7 +355,9 @@ mod tests {
         assert_eq!(
             Socket::parse("%ul\n  - for value in values\n    %li= value.name")
                 .unwrap()
-                .with_context("{\"values\": [{\"name\": \"Jane\"}, {\"name\": \"John\"}]}")
+                .with_context(build_context(
+                    "{\"values\": [{\"name\": \"Jane\"}, {\"name\": \"John\"}]}"
+                ))
                 .map(|v| v.to_html())
                 .unwrap(),
             "<ul><li>Jane</li><li>John</li></ul>"
@@ -374,7 +378,9 @@ mod tests {
             )
             .unwrap()
             .with_fragments(&fragments)
-            .with_context("{\"items\": [{\"name\": \"Jane\"}, {\"name\": \"John\"}]}")
+            .with_context(build_context(
+                "{\"items\": [{\"name\": \"Jane\"}, {\"name\": \"John\"}]}"
+            ))
             .map(|v| v.to_html())
             .unwrap(),
             "<ul><li>Jane</li><li>Separator</li><li>John</li><li>Separator</li></ul>",
@@ -404,5 +410,9 @@ mod tests {
                 .to_html(),
             "<section><div class=\"foo\"><h2>Hello world</h2><p>Hi</p><p>Hello</p></div></section>",
         )
+    }
+
+    fn build_context(input: &str) -> Option<Result<Context, ContextError>> {
+        Some(Context::load(input))
     }
 }
