@@ -38,7 +38,9 @@ fn evaluate_attribute_value_components<'a>(
         .iter()
         .map(|v| match v {
             AttributeValueComponent::RawValue(value) => value.to_string(),
-            AttributeValueComponent::InterpolatedValue(values) => context.interpret(values),
+            AttributeValueComponent::InterpolatedValue(values) => {
+                context.interpret(values).unwrap_or("".to_string())
+            }
         })
         .collect()
 }

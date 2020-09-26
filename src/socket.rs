@@ -1,6 +1,6 @@
 use super::{
     context::{Context, ContextError},
-    parser, styles, Nodes,
+    parser, styles, Builder, Nodes,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -10,31 +10,8 @@ pub type Fragments<'a> = HashMap<PathBuf, Nodes<'a>>;
 pub struct Socket<'a> {
     nodes: Nodes<'a>,
     context: Context,
-    fragments: Fragments<'a>,
+    fragments: Result<Fragments<'a>, Vec<FragmentError<'a>>>,
     styles: Option<String>,
-}
-
-fn hashmap_sequence<K: std::hash::Hash + std::cmp::Eq, V, E>(
-    hashmap: Vec<Result<(K, V), E>>,
-) -> Result<HashMap<K, V>, Vec<E>> {
-    let mut errors = vec![];
-    let mut final_map = HashMap::new();
-
-    for item in hashmap {
-        match item {
-            Err(e) => {
-                errors.push(e);
-            }
-            Ok((k, v)) => {
-                final_map.insert(k, v);
-            }
-        }
-    }
-    if errors.is_empty() {
-        Ok(final_map)
-    } else {
-        Err(errors)
-    }
 }
 
 #[derive(Debug)]
@@ -55,7 +32,7 @@ impl<'a> Socket<'a> {
     pub fn parse(input: &str) -> Result<Socket, SocketError> {
         let (_, nodes) = parser::parse(input).map_err(SocketError::ParseError)?;
         let context = Context::empty();
-        let fragments = HashMap::new();
+        let fragments = Ok(HashMap::new());
         Ok(Socket {
             nodes,
             context,
@@ -95,25 +72,33 @@ impl<'a> Socket<'a> {
     }
 
     pub fn with_fragments(&mut self, frags: &'a HashMap<PathBuf, String>) -> &mut Self {
-        let fragments = frags
+        let fragments: Builder<_, _> = frags
             .iter()
             .map(|(k, v)| match parser::parse(v) {
                 Ok(("", n)) => Ok((k.to_path_buf(), n)),
                 Ok(_) => Err(FragmentError::IncompleteParse(k.to_path_buf())),
                 Err(e) => Err(FragmentError::ParseError(e)),
             })
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
+            .into();
 
-        self.fragments = hashmap_sequence(fragments).unwrap_or(HashMap::new());
+        let result: Result<_, _> = fragments.into();
+
+        self.fragments = result.map(|v| v.into_iter().collect::<HashMap<_, _>>());
+
         self
     }
 
     pub fn to_html(&self) -> String {
-        self.nodes.to_html(
-            &self.context,
-            &self.fragments,
-            &HashMap::new(),
-            &self.styles,
-        )
+        self.nodes
+            .to_html(
+                Builder::default(),
+                &self.context,
+                &self.fragments.as_ref().unwrap_or(&HashMap::new()),
+                &HashMap::new(),
+                &self.styles,
+            )
+            .result()
+            .join("")
     }
 }

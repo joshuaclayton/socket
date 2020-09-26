@@ -1,4 +1,4 @@
-use super::{context::Context, Fragments, Node};
+use super::{context::Context, Builder, Fragments, Node, NodeError};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -13,28 +13,30 @@ pub enum Nodes<'a> {
 impl<'a> Nodes<'a> {
     pub fn to_html(
         &self,
+        mut builder: Builder<String, NodeError<'a>>,
         context: &Context,
         fragments: &Fragments<'a>,
         blocks: &Blocks<'a>,
         styles: &'a Option<String>,
-    ) -> String {
+    ) -> Builder<String, NodeError<'a>> {
         match self {
             Nodes::Fragment { nodes } => {
-                Self::nodes_to_html(nodes, context, fragments, blocks, styles)
+                builder = Self::nodes_to_html(builder, nodes, context, fragments, blocks, styles);
             }
-            Nodes::Document { nodes } => format!(
-                "{}{}",
-                "<!DOCTYPE html>",
-                Self::nodes_to_html(nodes, context, fragments, blocks, styles)
-            ),
+            Nodes::Document { nodes } => {
+                builder.append("<!DOCTYPE html>".to_string());
+                builder = Self::nodes_to_html(builder, nodes, context, fragments, blocks, styles);
+            }
             Nodes::FragmentSubclass { layout, blocks } => {
                 if let Some(nodes) = fragments.get(layout) {
-                    nodes.to_html(context, fragments, blocks, styles)
+                    builder = nodes.to_html(builder, context, fragments, blocks, styles)
                 } else {
-                    "".into()
+                    builder.warn(NodeError::InvalidFragmentPath(layout.to_path_buf()))
                 }
             }
         }
+
+        builder
     }
 
     pub fn prepend(&mut self, node: Node<'a>) {
@@ -65,16 +67,15 @@ impl<'a> Nodes<'a> {
     }
 
     fn nodes_to_html(
-        nodes: &[Node],
+        builder: Builder<String, NodeError<'a>>,
+        nodes: &[Node<'a>],
         context: &Context,
         fragments: &Fragments<'a>,
         blocks: &Blocks<'a>,
         styles: &'a Option<String>,
-    ) -> String {
-        nodes
-            .iter()
-            .map(|n| n.to_html(context, fragments, blocks, styles))
-            .collect::<Vec<String>>()
-            .join("")
+    ) -> Builder<String, NodeError<'a>> {
+        nodes.iter().fold(builder, |acc, n| {
+            n.to_html(acc, context, fragments, blocks, styles)
+        })
     }
 }

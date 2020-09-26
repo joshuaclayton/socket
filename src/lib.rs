@@ -1,5 +1,6 @@
 mod attribute;
 mod attributes;
+mod builder;
 pub mod cli;
 pub mod context;
 pub mod flags;
@@ -14,6 +15,7 @@ mod tag;
 pub use crate::socket::*;
 pub use attribute::*;
 pub use attributes::*;
+pub use builder::*;
 pub use node::*;
 pub use nodes::*;
 pub use tag::*;

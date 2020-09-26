@@ -36,8 +36,8 @@ impl Context {
         Ok(Context { payload })
     }
 
-    pub fn interpret(&self, value: &[Selector]) -> String {
-        self.at(value).map(value_to_string).unwrap_or("".into())
+    pub fn interpret(&self, value: &[Selector]) -> Option<String> {
+        self.at(value).map(value_to_string)
     }
 
     pub fn at(&self, value: &[Selector]) -> Option<&Value> {
