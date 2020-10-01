@@ -18,4 +18,5 @@ pub use attributes::*;
 pub use builder::*;
 pub use node::*;
 pub use nodes::*;
+pub use styles::Styles;
 pub use tag::*;

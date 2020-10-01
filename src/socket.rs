@@ -1,6 +1,6 @@
 use super::{
     context::{Context, ContextError},
-    parser, styles, Builder, Nodes,
+    parser, styles, Builder, Nodes, Styles,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -11,7 +11,7 @@ pub struct Socket<'a> {
     nodes: Nodes<'a>,
     context: Context,
     fragments: Result<Fragments<'a>, Vec<FragmentError<'a>>>,
-    styles: Option<String>,
+    styles: Styles,
 }
 
 #[derive(Debug)]
@@ -37,7 +37,7 @@ impl<'a> Socket<'a> {
             nodes,
             context,
             fragments,
-            styles: None,
+            styles: Styles::default(),
         })
     }
 
@@ -58,17 +58,9 @@ impl<'a> Socket<'a> {
         }
     }
 
-    pub fn with_styles(
-        &mut self,
-        styles: Result<String, styles::SassCompileError>,
-    ) -> Result<&mut Self, SocketError> {
-        match styles {
-            Ok(v) => {
-                self.styles = Some(v);
-                Ok(self)
-            }
-            Err(e) => Err(SocketError::StyleError(e)),
-        }
+    pub fn with_styles<T: Into<Styles>>(&mut self, styles: T) -> &mut Self {
+        self.styles = styles.into();
+        self
     }
 
     pub fn with_fragments(&mut self, frags: &'a HashMap<PathBuf, String>) -> &mut Self {
@@ -96,7 +88,7 @@ impl<'a> Socket<'a> {
                 &self.context,
                 &self.fragments.as_ref().unwrap_or(&HashMap::new()),
                 &HashMap::new(),
-                &self.styles,
+                &self.styles.as_option(),
             )
             .result()
             .join("")

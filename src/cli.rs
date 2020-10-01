@@ -16,7 +16,7 @@ pub fn run() {
                     parsed
                         .with_fragments(&fragments::new())
                         .with_styles(styles::generate(scss_entrypoint))
-                        .and_then(|v| v.with_context(context))
+                        .with_context(context)
                         .map(|v| v.to_html())
                         .unwrap_or("".to_string())
                 );
