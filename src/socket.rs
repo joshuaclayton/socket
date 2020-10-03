@@ -1,28 +1,20 @@
 use super::{
     context::{Context, ContextError},
+    fragments::Fragments,
     parser, styles, Builder, Nodes, Styles,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-pub type Fragments<'a> = HashMap<PathBuf, Nodes<'a>>;
-
 pub struct Socket<'a> {
     nodes: Nodes<'a>,
     context: Context,
-    fragments: Result<Fragments<'a>, Vec<FragmentError<'a>>>,
+    fragments: Fragments<'a>,
     styles: Styles,
 }
 
 #[derive(Debug)]
-pub enum FragmentError<'a> {
-    IncompleteParse(PathBuf),
-    ParseError(nom::Err<(&'a str, nom::error::ErrorKind)>),
-}
-
-#[derive(Debug)]
 pub enum SocketError<'a> {
-    FragmentError(FragmentError<'a>),
     ParseError(nom::Err<(&'a str, nom::error::ErrorKind)>),
     StyleError(styles::SassCompileError),
     ContextError(ContextError),
@@ -32,7 +24,7 @@ impl<'a> Socket<'a> {
     pub fn parse(input: &str) -> Result<Socket, SocketError> {
         let (_, nodes) = parser::parse(input).map_err(SocketError::ParseError)?;
         let context = Context::empty();
-        let fragments = Ok(HashMap::new());
+        let fragments = Fragments::default();
         Ok(Socket {
             nodes,
             context,
@@ -64,19 +56,10 @@ impl<'a> Socket<'a> {
     }
 
     pub fn with_fragments(&mut self, frags: &'a HashMap<PathBuf, String>) -> &mut Self {
-        let fragments: Builder<_, _> = frags
-            .iter()
-            .map(|(k, v)| match parser::parse(v) {
-                Ok(("", n)) => Ok((k.to_path_buf(), n)),
-                Ok(_) => Err(FragmentError::IncompleteParse(k.to_path_buf())),
-                Err(e) => Err(FragmentError::ParseError(e)),
-            })
-            .collect::<Vec<_>>()
-            .into();
-
-        let result: Result<_, _> = fragments.into();
-
-        self.fragments = result.map(|v| v.into_iter().collect::<HashMap<_, _>>());
+        for (k, v) in frags {
+            self.fragments
+                .insert(k.to_path_buf(), Fragments::parse(k, v));
+        }
 
         self
     }
@@ -86,7 +69,7 @@ impl<'a> Socket<'a> {
             .to_html(
                 Builder::default(),
                 &self.context,
-                &self.fragments.as_ref().unwrap_or(&HashMap::new()),
+                &self.fragments,
                 &HashMap::new(),
                 &self.styles.as_option(),
             )
