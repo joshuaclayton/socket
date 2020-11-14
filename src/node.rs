@@ -2,11 +2,13 @@ use super::{
     context::{Context, Selector},
     Blocks, Builder, Fragments, Nodes, Tag,
 };
+use pulldown_cmark::{html, Options, Parser};
 use serde_json::Value;
 use std::path::PathBuf;
 
 pub enum Node<'a> {
     Text(&'a str),
+    Markdown(Vec<&'a str>),
     InterpolatedText(Vec<Selector<'a>>),
     BlockValue(&'a str),
     Element {
@@ -46,6 +48,14 @@ impl<'a> Node<'a> {
     ) -> Builder<String, NodeError<'a>> {
         match self {
             Node::Text(v) => builder.append(v.to_string()),
+            Node::Markdown(lines) => {
+                let result = lines.join("\n\n");
+                let parser = Parser::new_ext(&result, Options::empty());
+                let mut html_output = String::new();
+                html::push_html(&mut html_output, parser);
+
+                builder.append(html_output)
+            }
             Node::InterpolatedText(selectors) => match context.interpret(selectors) {
                 None => builder.warn(NodeError::JSONValueMissingAtSelector(selectors.to_vec())),
                 Some(value) => builder.append(value),

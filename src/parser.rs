@@ -7,7 +7,7 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_till, take_while},
     combinator::{map, opt},
-    multi::{count, many0, separated_list},
+    multi::{count, many0, many1, separated_list},
     sequence::{preceded, terminated},
     IResult,
 };
@@ -63,6 +63,22 @@ fn parse_for_loop(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
                 children,
             },
         ))
+    })
+}
+
+fn parse_markdown_line(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, &str>> {
+    Box::new(move |input| preceded(count(tag("  "), depth), to_newline)(input))
+}
+
+fn parse_markdown(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
+    Box::new(move |input| {
+        let (input, _) = terminated(tag(":markdown"), many1(tag("\n")))(input)?;
+        let (input, markdown) = alt((
+            separated_list(many1(tag("\n")), parse_markdown_line(depth + 1)),
+            map(parse_markdown_line(depth + 1), |v| vec![v]),
+        ))(input)?;
+
+        Ok((input, Node::Markdown(markdown)))
     })
 }
 
@@ -128,6 +144,7 @@ fn parse_node(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
     Box::new(move |input| {
         let (input, _) = count(tag("  "), depth)(input)?;
         alt((
+            parse_markdown(depth),
             parse_for_loop(depth),
             parse_block_contents(depth),
             parse_fragment,
@@ -409,6 +426,18 @@ mod tests {
                 .with_fragments(&fragments)
                 .to_html(),
             "<section><div class=\"foo\"><h2>Hello world</h2><p>Hi</p><p>Hello</p></div></section>",
+        )
+    }
+
+    #[test]
+    fn markdown_support() {
+        assert_eq!(
+            Socket::parse(
+                ".markdown-text\n  :markdown\n\n    # hello world!\n\n    ## hey\n.other\n  :markdown\n    hi\n\n    hello\n    * first\n    * second"
+            )
+            .unwrap()
+            .to_html(),
+            "<div class=\"markdown-text\"><h1>hello world!</h1>\n<h2>hey</h2>\n</div><div class=\"other\"><p>hi</p>\n<p>hello</p>\n<ul>\n<li>\n<p>first</p>\n</li>\n<li>\n<p>second</p>\n</li>\n</ul>\n</div>"
         )
     }
 
