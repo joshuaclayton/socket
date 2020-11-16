@@ -10,6 +10,14 @@ pub enum Nodes<'a> {
     FragmentSubclass { layout: PathBuf, blocks: Blocks<'a> },
 }
 
+impl<'a> Default for Nodes<'a> {
+    fn default() -> Self {
+        Nodes::Fragment {
+            nodes: Vec::default(),
+        }
+    }
+}
+
 impl<'a> Nodes<'a> {
     pub fn to_html(
         &self,

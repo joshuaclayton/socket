@@ -66,6 +66,43 @@ fn parse_for_loop(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
     })
 }
 
+fn parse_if(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
+    Box::new(move |input| {
+        let (input, selectors) =
+            preceded(tag("- if "), terminated(selector::parse, tag("\n")))(input)?;
+        let (input, true_children) = parse_nodes(depth + 1)(input)?;
+
+        Ok((
+            input,
+            Node::IfElse {
+                selectors,
+                true_children,
+                false_children: Nodes::default(),
+            },
+        ))
+    })
+}
+
+fn parse_if_else(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
+    Box::new(move |input| {
+        let (input, selectors) =
+            preceded(tag("- if "), terminated(selector::parse, tag("\n")))(input)?;
+        let (input, true_children) = parse_nodes(depth + 1)(input)?;
+        let (input, _) = preceded(many1(tag("\n")), count(tag("  "), depth))(input)?;
+        let (input, _) = terminated(tag("- else"), tag("\n"))(input)?;
+        let (input, false_children) = parse_nodes(depth + 1)(input)?;
+
+        Ok((
+            input,
+            Node::IfElse {
+                selectors,
+                true_children,
+                false_children,
+            },
+        ))
+    })
+}
+
 fn parse_markdown_line(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, &str>> {
     Box::new(move |input| preceded(count(tag("  "), depth), to_newline)(input))
 }
@@ -146,6 +183,8 @@ fn parse_node(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
         alt((
             parse_markdown(depth),
             parse_for_loop(depth),
+            parse_if_else(depth),
+            parse_if(depth),
             parse_block_contents(depth),
             parse_fragment,
             parse_node_with_text(depth),
@@ -364,6 +403,73 @@ mod tests {
                 .map(|v| v.to_html())
                 .unwrap(),
             "<ul><li>first</li><li>second</li><li>third</li></ul>"
+        );
+    }
+
+    #[test]
+    fn if_statement() {
+        assert_eq!(
+            Socket::parse("- if flag\n  %p= value")
+                .unwrap()
+                .with_context(build_context("{\"value\": \"hello\", \"flag\": true}"))
+                .map(|v| v.to_html())
+                .unwrap(),
+            "<p>hello</p>"
+        );
+        assert_eq!(
+            Socket::parse("- if flag\n  %p= value")
+                .unwrap()
+                .with_context(build_context("{\"value\": \"hello\", \"flag\": false}"))
+                .map(|v| v.to_html())
+                .unwrap(),
+            ""
+        );
+    }
+
+    #[test]
+    fn if_else_statement() {
+        assert_eq!(
+            Socket::parse("- if flag\n  %p= value\n- else\n  %p= other")
+                .unwrap()
+                .with_context(build_context(
+                    "{\"value\": \"hello\", \"other\": \"good bye\", \"flag\": false}"
+                ))
+                .map(|v| v.to_html())
+                .unwrap(),
+            "<p>good bye</p>"
+        );
+    }
+
+    #[test]
+    fn nested_if_statement() {
+        assert_eq!(
+            Socket::parse("- if flag\n  - if otherflag\n    %p= works\n- else\n  %p= works")
+                .unwrap()
+                .with_context(build_context(
+                    "{\"works\": \"sure does\", \"otherflag\": false, \"flag\": true}"
+                ))
+                .map(|v| v.to_html())
+                .unwrap(),
+            ""
+        );
+
+        assert_eq!(
+            Socket::parse(
+                r#"
+- if flag
+  - if otherflag
+    %p= works
+
+  - else
+    %p do not get here"#
+            )
+            .unwrap()
+            .with_context(build_context(
+                "{\"works\": \"sure does\", \"otherflag\": true, \"flag\": true}"
+            ))
+            .map(|v| v.to_html())
+            .unwrap(),
+            "<p>sure does</p>"
         );
     }
 

@@ -20,6 +20,11 @@ pub enum Node<'a> {
         selectors: Vec<Selector<'a>>,
         children: Nodes<'a>,
     },
+    IfElse {
+        selectors: Vec<Selector<'a>>,
+        true_children: Nodes<'a>,
+        false_children: Nodes<'a>,
+    },
     Fragment {
         path: PathBuf,
     },
@@ -35,6 +40,7 @@ pub enum NodeError<'a> {
     InvalidBlockName(&'a str),
     JSONValueMissingAtSelector(Vec<Selector<'a>>),
     JSONValueNotArrayAtSelector(Vec<Selector<'a>>),
+    JSONValueNotBoolAtSelector(Vec<Selector<'a>>),
 }
 
 impl<'a> Node<'a> {
@@ -91,6 +97,20 @@ impl<'a> Node<'a> {
                     })
                 }
                 Some(_) => builder.warn(NodeError::JSONValueNotArrayAtSelector(selectors.to_vec())),
+            },
+            Node::IfElse {
+                selectors,
+                true_children,
+                false_children,
+            } => match context.at(selectors) {
+                None => builder.warn(NodeError::JSONValueMissingAtSelector(selectors.to_vec())),
+                Some(Value::Bool(true)) => {
+                    builder = true_children.to_html(builder, context, fragments, blocks, styles)
+                }
+                Some(Value::Bool(false)) => {
+                    builder = false_children.to_html(builder, context, fragments, blocks, styles)
+                }
+                Some(_) => builder.warn(NodeError::JSONValueNotBoolAtSelector(selectors.to_vec())),
             },
             Node::Fragment { path } => {
                 if let Some(nodes) = fragments.get(path) {
