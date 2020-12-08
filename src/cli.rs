@@ -12,13 +12,14 @@ pub fn run() {
         Ok(input) => {
             if let Ok(mut parsed) = Socket::parse(&input) {
                 let frags = fragments::new();
-                let with_frags = parsed.with_fragments(&frags);
+                let with_frags = parsed
+                    .with_fragments(&frags)
+                    .with_styles(styles::generate(scss_entrypoint));
 
                 eprintln!("{:?}", with_frags.compile());
                 println!(
                     "{}",
                     with_frags
-                        .with_styles(styles::generate(scss_entrypoint))
                         .with_context(context)
                         .map(|v| v.to_html())
                         .unwrap_or("".to_string())

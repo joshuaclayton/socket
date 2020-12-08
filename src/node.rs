@@ -88,41 +88,37 @@ impl<'a> Node<'a> {
                 .and_then(|nodes| {
                     nodes
                         .compile(blocks, fragments)
-                        .map(|nodes_| CompiledNode::Nodes(nodes_))
+                        .map(|nodes| CompiledNode::Nodes(nodes))
                 }),
-            Node::Element { tag, children } => {
-                children
-                    .compile(blocks, fragments)
-                    .map(|nodes_| CompiledNode::Element {
-                        tag,
-                        children: nodes_,
-                    })
-            }
+            Node::Element { tag, children } => children
+                .compile(blocks, fragments)
+                .map(|children| CompiledNode::Element { tag, children }),
             Node::ForLoop {
                 local,
                 selectors,
                 children,
             } => children
                 .compile(blocks, fragments)
-                .map(|nodes_| CompiledNode::ForLoop {
+                .map(|children| CompiledNode::ForLoop {
                     local,
                     selectors,
-                    children: nodes_,
+                    children,
                 }),
             Node::IfElse {
                 selectors,
                 true_children,
                 false_children,
             } => {
-                let true_children_compiled = true_children.compile(blocks, fragments);
-                let false_children_compiled = false_children.compile(blocks, fragments);
-                match (true_children_compiled, false_children_compiled) {
+                match (
+                    true_children.compile(blocks, fragments),
+                    false_children.compile(blocks, fragments),
+                ) {
                     (Err(e1), _) => Err(e1),
                     (_, Err(e2)) => Err(e2),
-                    (Ok(tc), Ok(fc)) => Ok(CompiledNode::IfElse {
+                    (Ok(true_children), Ok(false_children)) => Ok(CompiledNode::IfElse {
                         selectors,
-                        true_children: tc,
-                        false_children: fc,
+                        true_children,
+                        false_children,
                     }),
                 }
             }
@@ -132,17 +128,17 @@ impl<'a> Node<'a> {
                 .and_then(|nodes| {
                     nodes
                         .compile(blocks, fragments)
-                        .map(|nodes_| CompiledNode::Nodes(nodes_))
+                        .map(|nodes| CompiledNode::Nodes(nodes))
                 }),
             Node::Block { name, children } => {
                 if let Some(boxed_nodes) = blocks.get(name) {
                     boxed_nodes
                         .compile(blocks, fragments)
-                        .map(|nodes_| CompiledNode::Nodes(nodes_))
+                        .map(|nodes| CompiledNode::Nodes(nodes))
                 } else {
                     children
                         .compile(blocks, fragments)
-                        .map(|nodes_| CompiledNode::Nodes(nodes_))
+                        .map(|nodes| CompiledNode::Nodes(nodes))
                 }
             }
         }
@@ -230,6 +226,60 @@ impl<'a> Node<'a> {
                     builder = children.to_html(builder, context, fragments, blocks, styles)
                 }
             }
+        };
+
+        builder
+    }
+}
+
+impl<'a> CompiledNode<'a> {
+    pub fn to_html(
+        &self,
+        mut builder: Builder<String, NodeError<'a>>,
+        context: &Context,
+        styles: &'a Option<String>,
+    ) -> Builder<String, NodeError<'a>> {
+        match self {
+            CompiledNode::Text(v) => builder.append(v.to_string()),
+            CompiledNode::Markdown(html_output) => builder.append(html_output.to_string()),
+            CompiledNode::InterpolatedText(selectors) => match context.interpret(selectors) {
+                None => builder.warn(NodeError::JSONValueMissingAtSelector(selectors.to_vec())),
+                Some(value) => builder.append(value),
+            },
+            CompiledNode::Element { tag, children } => {
+                builder.append(tag.open_tag_html(context));
+                builder = children.to_html(builder, context, styles);
+                builder.append(tag.additional_markup(styles));
+                builder.append(tag.close_tag_html());
+            }
+            CompiledNode::ForLoop {
+                local,
+                selectors,
+                children,
+            } => match context.at(selectors) {
+                None => builder.warn(NodeError::JSONValueMissingAtSelector(selectors.to_vec())),
+                Some(Value::Array(loopable)) => {
+                    builder = loopable.iter().fold(builder, |acc, looped_value| {
+                        children.to_html(acc, &context.extend(local, looped_value), styles)
+                    })
+                }
+                Some(_) => builder.warn(NodeError::JSONValueNotArrayAtSelector(selectors.to_vec())),
+            },
+            CompiledNode::IfElse {
+                selectors,
+                true_children,
+                false_children,
+            } => match context.at(selectors) {
+                None => builder.warn(NodeError::JSONValueMissingAtSelector(selectors.to_vec())),
+                Some(Value::Bool(true)) => {
+                    builder = true_children.to_html(builder, context, styles)
+                }
+                Some(Value::Bool(false)) => {
+                    builder = false_children.to_html(builder, context, styles)
+                }
+                Some(_) => builder.warn(NodeError::JSONValueNotBoolAtSelector(selectors.to_vec())),
+            },
+            CompiledNode::Nodes(nodes) => builder = nodes.to_html(builder, context, styles),
         };
 
         builder

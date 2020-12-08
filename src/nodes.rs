@@ -119,3 +119,35 @@ impl<'a> Nodes<'a> {
         })
     }
 }
+
+impl<'a> CompiledNodes<'a> {
+    pub fn to_html(
+        &self,
+        mut builder: Builder<String, NodeError<'a>>,
+        context: &Context,
+        styles: &'a Option<String>,
+    ) -> Builder<String, NodeError<'a>> {
+        match self {
+            CompiledNodes::Fragment { nodes } => {
+                builder = Self::nodes_to_html(builder, nodes, context, styles);
+            }
+            CompiledNodes::Document { nodes } => {
+                builder.append("<!DOCTYPE html>".to_string());
+                builder = Self::nodes_to_html(builder, nodes, context, styles);
+            }
+        }
+
+        builder
+    }
+
+    fn nodes_to_html(
+        builder: Builder<String, NodeError<'a>>,
+        nodes: &[CompiledNode<'a>],
+        context: &Context,
+        styles: &'a Option<String>,
+    ) -> Builder<String, NodeError<'a>> {
+        nodes
+            .iter()
+            .fold(builder, |acc, n| n.to_html(acc, context, styles))
+    }
+}
