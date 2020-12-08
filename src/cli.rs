@@ -11,10 +11,13 @@ pub fn run() {
     match read_from_stdin() {
         Ok(input) => {
             if let Ok(mut parsed) = Socket::parse(&input) {
+                let frags = fragments::new();
+                let with_frags = parsed.with_fragments(&frags);
+
+                eprintln!("{:?}", with_frags.compile());
                 println!(
                     "{}",
-                    parsed
-                        .with_fragments(&fragments::new())
+                    with_frags
                         .with_styles(styles::generate(scss_entrypoint))
                         .with_context(context)
                         .map(|v| v.to_html())

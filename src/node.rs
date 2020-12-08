@@ -1,6 +1,6 @@
 use super::{
     context::{Context, Selector},
-    Blocks, Builder, Fragments, Nodes, Tag,
+    Blocks, Builder, CompiledNodes, Fragments, Nodes, Tag,
 };
 use pulldown_cmark::{html, Options, Parser};
 use serde_json::Value;
@@ -35,6 +35,28 @@ pub enum Node<'a> {
 }
 
 #[derive(Debug)]
+pub enum CompiledNode<'a> {
+    Text(&'a str),
+    Markdown(String),
+    InterpolatedText(&'a Vec<Selector<'a>>),
+    Nodes(CompiledNodes<'a>),
+    Element {
+        tag: &'a Tag<'a>,
+        children: CompiledNodes<'a>,
+    },
+    ForLoop {
+        local: &'a str,
+        selectors: &'a Vec<Selector<'a>>,
+        children: CompiledNodes<'a>,
+    },
+    IfElse {
+        selectors: &'a Vec<Selector<'a>>,
+        true_children: CompiledNodes<'a>,
+        false_children: CompiledNodes<'a>,
+    },
+}
+
+#[derive(Debug)]
 pub enum NodeError<'a> {
     InvalidFragmentPath(PathBuf),
     InvalidBlockName(&'a str),
@@ -44,6 +66,88 @@ pub enum NodeError<'a> {
 }
 
 impl<'a> Node<'a> {
+    pub fn compile(
+        &'a self,
+        blocks: &'a Blocks<'a>,
+        fragments: &'a Fragments<'a>,
+    ) -> Result<CompiledNode<'a>, Vec<NodeError<'a>>> {
+        match self {
+            Node::Text(v) => Ok(CompiledNode::Text(v)),
+            Node::Markdown(lines) => {
+                let result = lines.join("\n\n");
+                let parser = Parser::new_ext(&result, Options::empty());
+                let mut html_output = String::new();
+                html::push_html(&mut html_output, parser);
+
+                Ok(CompiledNode::Markdown(html_output))
+            }
+            Node::InterpolatedText(v) => Ok(CompiledNode::InterpolatedText(v)),
+            Node::BlockValue(name) => blocks
+                .get(name)
+                .ok_or(vec![NodeError::InvalidBlockName(name)])
+                .and_then(|nodes| {
+                    nodes
+                        .compile(blocks, fragments)
+                        .map(|nodes_| CompiledNode::Nodes(nodes_))
+                }),
+            Node::Element { tag, children } => {
+                children
+                    .compile(blocks, fragments)
+                    .map(|nodes_| CompiledNode::Element {
+                        tag,
+                        children: nodes_,
+                    })
+            }
+            Node::ForLoop {
+                local,
+                selectors,
+                children,
+            } => children
+                .compile(blocks, fragments)
+                .map(|nodes_| CompiledNode::ForLoop {
+                    local,
+                    selectors,
+                    children: nodes_,
+                }),
+            Node::IfElse {
+                selectors,
+                true_children,
+                false_children,
+            } => {
+                let true_children_compiled = true_children.compile(blocks, fragments);
+                let false_children_compiled = false_children.compile(blocks, fragments);
+                match (true_children_compiled, false_children_compiled) {
+                    (Err(e1), _) => Err(e1),
+                    (_, Err(e2)) => Err(e2),
+                    (Ok(tc), Ok(fc)) => Ok(CompiledNode::IfElse {
+                        selectors,
+                        true_children: tc,
+                        false_children: fc,
+                    }),
+                }
+            }
+            Node::Fragment { path } => fragments
+                .get(&path)
+                .ok_or(vec![NodeError::InvalidFragmentPath(path.to_path_buf())])
+                .and_then(|nodes| {
+                    nodes
+                        .compile(blocks, fragments)
+                        .map(|nodes_| CompiledNode::Nodes(nodes_))
+                }),
+            Node::Block { name, children } => {
+                if let Some(boxed_nodes) = blocks.get(name) {
+                    boxed_nodes
+                        .compile(blocks, fragments)
+                        .map(|nodes_| CompiledNode::Nodes(nodes_))
+                } else {
+                    children
+                        .compile(blocks, fragments)
+                        .map(|nodes_| CompiledNode::Nodes(nodes_))
+                }
+            }
+        }
+    }
+
     pub fn to_html(
         &self,
         mut builder: Builder<String, NodeError<'a>>,

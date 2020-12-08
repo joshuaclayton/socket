@@ -1,5 +1,6 @@
 use super::{context::Context, Attribute, Attributes};
 
+#[derive(Debug)]
 pub struct Tag<'a> {
     pub name: &'a str,
     pub attributes: Vec<Attribute<'a>>,

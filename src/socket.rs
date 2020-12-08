@@ -1,7 +1,7 @@
 use super::{
     context::{Context, ContextError},
     fragments::Fragments,
-    parser, styles, Builder, Nodes, Styles,
+    parser, styles, Blocks, Builder, CompiledNodes, NodeError, Nodes, Styles,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -10,6 +10,7 @@ pub struct Socket<'a> {
     nodes: Nodes<'a>,
     context: Context,
     fragments: Fragments<'a>,
+    blocks: Blocks<'a>,
     styles: Styles,
 }
 
@@ -25,10 +26,12 @@ impl<'a> Socket<'a> {
         let (_, nodes) = parser::parse(input).map_err(SocketError::ParseError)?;
         let context = Context::empty();
         let fragments = Fragments::default();
+        let blocks = Blocks::default();
         Ok(Socket {
             nodes,
             context,
             fragments,
+            blocks,
             styles: Styles::default(),
         })
     }
@@ -62,6 +65,10 @@ impl<'a> Socket<'a> {
         }
 
         self
+    }
+
+    pub fn compile(&'a self) -> Result<CompiledNodes<'a>, Vec<NodeError<'a>>> {
+        self.nodes.compile(&self.blocks, &self.fragments)
     }
 
     pub fn to_html(&self) -> String {

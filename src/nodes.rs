@@ -1,4 +1,4 @@
-use super::{context::Context, Builder, Fragments, Node, NodeError};
+use super::{context::Context, Builder, CompiledNode, Fragments, Node, NodeError};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -10,6 +10,12 @@ pub enum Nodes<'a> {
     FragmentSubclass { layout: PathBuf, blocks: Blocks<'a> },
 }
 
+#[derive(Debug)]
+pub enum CompiledNodes<'a> {
+    Fragment { nodes: Vec<CompiledNode<'a>> },
+    Document { nodes: Vec<CompiledNode<'a>> },
+}
+
 impl<'a> Default for Nodes<'a> {
     fn default() -> Self {
         Nodes::Fragment {
@@ -19,6 +25,32 @@ impl<'a> Default for Nodes<'a> {
 }
 
 impl<'a> Nodes<'a> {
+    pub fn compile(
+        &'a self,
+        blocks: &'a Blocks<'a>,
+        fragments: &'a Fragments<'a>,
+    ) -> Result<CompiledNodes<'a>, Vec<NodeError<'a>>> {
+        match self {
+            Nodes::Fragment { nodes } => nodes
+                .into_iter()
+                .map(|v| v.compile(blocks, fragments))
+                .collect::<Result<Vec<_>, Vec<_>>>()
+                .map(|n| CompiledNodes::Fragment { nodes: n }),
+            Nodes::Document { nodes } => nodes
+                .into_iter()
+                .map(|v| v.compile(blocks, fragments))
+                .collect::<Result<Vec<_>, Vec<_>>>()
+                .map(|n| CompiledNodes::Document { nodes: n }),
+            Nodes::FragmentSubclass { layout, blocks } => {
+                if let Some(nodes) = fragments.get(layout) {
+                    nodes.compile(blocks, fragments)
+                } else {
+                    Err(vec![NodeError::InvalidFragmentPath(layout.to_path_buf())])
+                }
+            }
+        }
+    }
+
     pub fn to_html(
         &self,
         mut builder: Builder<String, NodeError<'a>>,
