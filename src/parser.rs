@@ -289,6 +289,16 @@ mod tests {
     }
 
     #[test]
+    fn div_with_tailwind_classes() {
+        assert_eq!(
+            Socket::parse(".custom-class.other.lg:max-w-sm.w-1/4")
+                .unwrap()
+                .to_html(),
+            "<div class=\"custom-class other lg:max-w-sm w-1/4\"></div>"
+        );
+    }
+
+    #[test]
     fn div_with_id() {
         assert_eq!(
             Socket::parse("#unique-id").unwrap().to_html(),

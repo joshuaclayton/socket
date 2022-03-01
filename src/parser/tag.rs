@@ -49,7 +49,7 @@ fn parse_attributes(input: &str) -> IResult<&str, Vec<Attribute>> {
 }
 
 fn parse_html_class(input: &str) -> IResult<&str, &str> {
-    take_while(|c: char| c.is_alphanumeric() || c == '-' || c == '_' || c == '/')(input)
+    take_while(|c: char| c.is_alphanumeric() || c == '-' || c == '_' || c == '/' || c == ':')(input)
 }
 
 #[cfg(test)]
