@@ -71,7 +71,9 @@ fn handle<'a>(payload: &'a Value, mut value: Iter<Selector>) -> Option<&'a Value
         },
 
         Some(Selector::Index(index)) => match payload {
-            Value::Array(records) => records.get(*index),
+            Value::Array(records) => records
+                .get(*index)
+                .and_then(|value_at_position| handle(value_at_position, value)),
             _ => None,
         },
     }

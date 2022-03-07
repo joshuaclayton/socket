@@ -1,0 +1,2 @@
+- if boolTrue
+  %h1 Bool is true

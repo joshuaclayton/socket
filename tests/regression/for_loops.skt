@@ -1,0 +1,6 @@
+%ul
+  - for person in people
+    %li
+      %span= person.name
+      %span  is 
+      %span= person.age

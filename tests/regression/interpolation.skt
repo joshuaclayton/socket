@@ -1,0 +1,4 @@
+%section
+  %h2.name= people[0].name
+  %p Age: 
+    %span= people[0].age

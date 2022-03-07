@@ -1,0 +1,15 @@
+{
+  "boolTrue": true,
+  "boolFalse": false,
+  "people": [
+    {
+      "name": "Jane",
+      "age": 55,
+      "email": "jane@example.com"
+    },
+    {
+      "name": "Joan",
+      "age": 15
+    }
+  ]
+}
