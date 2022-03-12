@@ -1,12 +1,16 @@
 use super::{context::Context, flags::Flags, fragments, styles, Socket};
 use std::io::{self, Read};
 use std::path::PathBuf;
+use std::str::FromStr;
 use structopt::StructOpt;
 
 pub fn run() {
     let flags = Flags::from_args();
     let context = flags.context.map(Context::from_file);
     let scss_entrypoint = PathBuf::from("styles/app.scss");
+    let fragments_root = flags
+        .fragments
+        .unwrap_or(PathBuf::from_str("./fragments").unwrap());
 
     match read_from_stdin() {
         Ok(input) => {
@@ -14,7 +18,7 @@ pub fn run() {
                 println!(
                     "{}",
                     parsed
-                        .with_fragments(&fragments::new())
+                        .with_fragments(&fragments::new(fragments_root))
                         .with_styles(styles::generate(scss_entrypoint))
                         .with_context(context)
                         .map(|v| v.to_html())

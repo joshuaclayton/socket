@@ -44,19 +44,19 @@ pub enum FragmentError<'a> {
     ParseError(nom::Err<(&'a str, nom::error::ErrorKind)>),
 }
 
-pub fn new() -> HashMap<PathBuf, String> {
+pub fn new(fragments_path: PathBuf) -> HashMap<PathBuf, String> {
     let mut map = HashMap::new();
 
-    for entry in WalkDir::new(".")
+    for entry in WalkDir::new(fragments_path.clone())
         .follow_links(true)
         .into_iter()
         .filter_map(|e| e.ok())
     {
-        let path = entry.path().strip_prefix("./").unwrap();
+        let path = entry.path().strip_prefix(&fragments_path);
 
-        if is_fragment(path) {
-            if let Some(file_body) = read_file(path) {
-                map.insert(path.into(), file_body);
+        if is_fragment(&path) {
+            if let Some(file_body) = read_file(entry.path()) {
+                map.insert(path.unwrap().into(), file_body);
             }
         };
     }
@@ -68,6 +68,9 @@ fn read_file<P: AsRef<Path>>(filename: P) -> Option<String> {
     fs::read_to_string(filename).ok()
 }
 
-fn is_fragment(path: &Path) -> bool {
-    path.starts_with("fragments") && path.extension() == Some(std::ffi::OsStr::new("skt"))
+fn is_fragment<T>(path: &Result<&Path, T>) -> bool {
+    match path {
+        Ok(v) => v.extension() == Some(std::ffi::OsStr::new("skt")),
+        _ => false,
+    }
 }

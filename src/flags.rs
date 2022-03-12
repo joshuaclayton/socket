@@ -9,4 +9,7 @@ pub struct Flags {
     /// Load context from a JSON file
     #[structopt(long)]
     pub context: Option<PathBuf>,
+
+    #[structopt(long)]
+    pub fragments: Option<PathBuf>,
 }

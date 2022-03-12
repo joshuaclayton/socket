@@ -11,6 +11,7 @@ fn verify_behavior() {
     behavior_for("interpolation");
     behavior_for("attribute_interpolation");
     behavior_for("for_loops");
+    behavior_for("fragments");
 }
 
 fn behavior_for(test: &str) {
@@ -18,6 +19,9 @@ fn behavior_for(test: &str) {
 
     cmd.arg("--context");
     cmd.arg("tests/regression/context.json");
+
+    cmd.arg("--fragments");
+    cmd.arg("tests/regression/fragments");
 
     let (input, output) = load_data(test);
     cmd.write_stdin(input);
