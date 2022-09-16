@@ -8,7 +8,7 @@ use nom::{
     bytes::complete::{tag, take_till, take_while},
     combinator::{map, opt},
     multi::{count, many0, many1, separated_list0, separated_list1},
-    sequence::{preceded, terminated},
+    sequence::{preceded, separated_pair, terminated},
     IResult,
 };
 use std::path::PathBuf;
@@ -58,6 +58,35 @@ fn parse_for_loop(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
         Ok((
             input,
             Node::ForLoop {
+                index: None,
+                local,
+                selectors,
+                children,
+            },
+        ))
+    })
+}
+
+fn parse_for_loop_with_index(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
+    Box::new(move |input| {
+        let (input, (index, local)) = preceded(
+            tag("- for "),
+            terminated(
+                separated_pair(
+                    take_while(|c: char| c.is_alphanumeric()),
+                    tag(", "),
+                    take_while(|c: char| c.is_alphanumeric()),
+                ),
+                tag(" in "),
+            ),
+        )(input)?;
+        let (input, selectors) = terminated(selector::parse, tag("\n"))(input)?;
+        let (input, children) = parse_nodes(depth + 1)(input)?;
+
+        Ok((
+            input,
+            Node::ForLoop {
+                index: Some(index),
                 local,
                 selectors,
                 children,
@@ -181,6 +210,7 @@ fn parse_node(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
         let (input, _) = count(tag("  "), depth)(input)?;
         alt((
             parse_markdown(depth),
+            parse_for_loop_with_index(depth),
             parse_for_loop(depth),
             parse_if_else(depth),
             parse_if(depth),

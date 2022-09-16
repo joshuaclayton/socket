@@ -16,6 +16,7 @@ pub enum Node<'a> {
         children: Nodes<'a>,
     },
     ForLoop {
+        index: Option<&'a str>,
         local: &'a str,
         selectors: Vec<Selector<'a>>,
         children: Nodes<'a>,
@@ -80,20 +81,24 @@ impl<'a> Node<'a> {
                 builder.append(tag.close_tag_html());
             }
             Node::ForLoop {
+                index,
                 local,
                 selectors,
                 children,
             } => match context.at(selectors) {
                 None => builder.warn(NodeError::JSONValueMissingAtSelector(selectors.to_vec())),
                 Some(Value::Array(loopable)) => {
+                    let mut idx = 0;
                     builder = loopable.iter().fold(builder, |acc, looped_value| {
-                        children.to_html(
-                            acc,
-                            &context.extend(local, looped_value),
-                            fragments,
-                            blocks,
-                            styles,
-                        )
+                        let mut ctx = context.extend(local, looped_value);
+
+                        if let Some(index) = index {
+                            ctx = ctx.extend(index, &Value::Number(idx.into()));
+                        }
+
+                        idx += 1;
+
+                        children.to_html(acc, &ctx, fragments, blocks, styles)
                     })
                 }
                 Some(_) => builder.warn(NodeError::JSONValueNotArrayAtSelector(selectors.to_vec())),

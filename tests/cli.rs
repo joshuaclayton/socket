@@ -11,6 +11,7 @@ fn verify_behavior() {
     behavior_for("interpolation");
     behavior_for("attribute_interpolation");
     behavior_for("for_loops");
+    behavior_for("for_loop_with_index");
     behavior_for("fragments");
 }
 
