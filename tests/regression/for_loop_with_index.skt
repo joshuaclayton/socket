@@ -1,6 +1,3 @@
 %ul
   - for index, person in people
-    %li
-      %span= person.name
-      %span  is index 
-      %span= index
+    - fragment person2.skt

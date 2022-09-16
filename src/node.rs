@@ -4,6 +4,7 @@ use super::{
 };
 use pulldown_cmark::{html, Options, Parser};
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 pub enum Node<'a> {
@@ -28,6 +29,10 @@ pub enum Node<'a> {
     },
     Fragment {
         path: PathBuf,
+    },
+    FragmentWithLocals {
+        path: PathBuf,
+        locals: BTreeMap<&'a str, Vec<Selector<'a>>>,
     },
     Block {
         name: &'a str,
@@ -120,6 +125,21 @@ impl<'a> Node<'a> {
             Node::Fragment { path } => {
                 if let Some(nodes) = fragments.get(path) {
                     builder = nodes.to_html(builder, context, fragments, blocks, styles)
+                } else {
+                    builder.warn(NodeError::InvalidFragmentPath(path.to_path_buf()))
+                }
+            }
+            Node::FragmentWithLocals { path, locals } => {
+                if let Some(nodes) = fragments.get(path) {
+                    let mut ctx = context.clone();
+
+                    for (k, v) in locals {
+                        if let Some(val) = ctx.at(&v) {
+                            ctx = ctx.extend(k, val);
+                        }
+                    }
+
+                    builder = nodes.to_html(builder, &ctx, fragments, blocks, styles)
                 } else {
                     builder.warn(NodeError::InvalidFragmentPath(path.to_path_buf()))
                 }

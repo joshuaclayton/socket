@@ -3,6 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::slice::Iter;
 
+#[derive(Clone)]
 pub struct Context {
     payload: serde_json::Value,
 }

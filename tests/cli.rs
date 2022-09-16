@@ -13,6 +13,7 @@ fn verify_behavior() {
     behavior_for("for_loops");
     behavior_for("for_loop_with_index");
     behavior_for("fragments");
+    behavior_for("fragment_with_value");
 }
 
 fn behavior_for(test: &str) {

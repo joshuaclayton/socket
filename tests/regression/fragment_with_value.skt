@@ -1,0 +1,3 @@
+%ul
+  - for idx, per in people
+    - fragment(person=per index=idx) person2.skt

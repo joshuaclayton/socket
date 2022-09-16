@@ -2,7 +2,7 @@ mod custom_attributes;
 mod selector;
 mod tag;
 
-use super::{Attribute, Node, Nodes, Tag};
+use super::{context::Selector, Attribute, Node, Nodes, Tag};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_till, take_while},
@@ -11,7 +11,7 @@ use nom::{
     sequence::{preceded, separated_pair, terminated},
     IResult,
 };
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 
 pub fn parse(input: &str) -> IResult<&str, Nodes> {
     let (input, html_attributes) = opt(terminated(
@@ -147,6 +147,41 @@ fn parse_markdown(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
         Ok((input, Node::Markdown(markdown)))
     })
 }
+
+fn parse_fragment_with_attributes(input: &str) -> IResult<&str, Node> {
+    let (input, (locals, path)) = separated_pair(
+        preceded(tag("- fragment"), parse_key_value_pairs),
+        tag(" "),
+        map(to_newline, PathBuf::from),
+    )(input)?;
+
+    Ok((input, Node::FragmentWithLocals { locals, path }))
+}
+
+fn parse_key_value_pairs(input: &str) -> IResult<&str, BTreeMap<&str, Vec<Selector>>> {
+    let (input, pairs) = preceded(
+        tag("("),
+        terminated(
+            separated_list1(
+                tag(" "),
+                separated_pair(
+                    take_while(|c: char| c.is_alphanumeric()),
+                    tag("="),
+                    selector::parse,
+                ),
+            ),
+            tag(")"),
+        ),
+    )(input)?;
+
+    let mut result = BTreeMap::default();
+    for (k, v) in pairs {
+        result.insert(k, v);
+    }
+
+    Ok((input, result))
+}
+
 fn parse_fragment(input: &str) -> IResult<&str, Node> {
     let (input, path) = map(preceded(tag("- fragment "), to_newline), PathBuf::from)(input)?;
 
@@ -215,6 +250,7 @@ fn parse_node(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
             parse_if_else(depth),
             parse_if(depth),
             parse_block_contents(depth),
+            parse_fragment_with_attributes,
             parse_fragment,
             parse_node_with_text(depth),
             parse_node_with_interpolated_text(depth),
