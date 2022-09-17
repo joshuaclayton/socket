@@ -73,9 +73,9 @@ fn parse_for_loop_with_index(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, 
             tag("- for "),
             terminated(
                 separated_pair(
-                    take_while(|c: char| c.is_alphanumeric()),
+                    take_while(|c: char| c.is_alphanumeric() || c == '_'),
                     tag(", "),
-                    take_while(|c: char| c.is_alphanumeric()),
+                    take_while(|c: char| c.is_alphanumeric() || c == '_'),
                 ),
                 tag(" in "),
             ),

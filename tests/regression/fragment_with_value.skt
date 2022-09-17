@@ -1,3 +1,3 @@
 %ul
-  - for idx, per in people
-    - fragment(person=per index=idx) person2.skt
+  - for idx, _ in people
+    - fragment(person=people[idx] index=idx) person2.skt

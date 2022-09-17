@@ -18,6 +18,7 @@ pub enum ContextError {
 pub enum Selector<'a> {
     Key(&'a str),
     Index(usize),
+    KeyedIndex(&'a str),
 }
 
 impl Context {
@@ -42,7 +43,7 @@ impl Context {
     }
 
     pub fn at(&self, value: &[Selector]) -> Option<&Value> {
-        handle(&self.payload, value.iter())
+        handle(&self, &self.payload, value.iter())
     }
 
     pub fn extend(&self, key: &str, value: &Value) -> Self {
@@ -61,22 +62,40 @@ impl Context {
     }
 }
 
-fn handle<'a>(payload: &'a Value, mut value: Iter<Selector>) -> Option<&'a Value> {
+fn handle<'a>(
+    context: &Context,
+    payload: &'a Value,
+    mut value: Iter<Selector>,
+) -> Option<&'a Value> {
     match value.next() {
         None => Some(payload),
         Some(Selector::Key(key)) => match payload {
             Value::Object(map) => map
                 .get(*key)
-                .and_then(|value_for_key| handle(value_for_key, value)),
+                .and_then(|value_for_key| handle(context, value_for_key, value)),
             _ => None,
         },
 
         Some(Selector::Index(index)) => match payload {
             Value::Array(records) => records
                 .get(*index)
-                .and_then(|value_at_position| handle(value_at_position, value)),
+                .and_then(|value_at_position| handle(context, value_at_position, value)),
             _ => None,
         },
+
+        Some(Selector::KeyedIndex(key)) => {
+            if let Some(Value::Number(idx)) = context.at(&[Selector::Key(key)]) {
+                let index = idx.as_u64().unwrap() as usize;
+                match payload {
+                    Value::Array(records) => records
+                        .get(index)
+                        .and_then(|value_at_position| handle(context, value_at_position, value)),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        }
     }
 }
 

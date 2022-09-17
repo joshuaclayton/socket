@@ -1,7 +1,7 @@
 use super::super::context::Selector;
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_while},
+    bytes::complete::{tag, take_while, take_while1},
     character::complete::digit1,
     combinator::{map, map_res, recognize},
     multi::many0,
@@ -37,8 +37,18 @@ fn parse_selector_object_index(input: &str) -> IResult<&str, Selector> {
     map(parse_usize, Selector::Index)(input)
 }
 
+fn parse_index(input: &str) -> IResult<&str, Selector> {
+    alt((
+        parse_selector_object_index,
+        map(
+            take_while(|c: char| c.is_alphanumeric()),
+            Selector::KeyedIndex,
+        ),
+    ))(input)
+}
+
 fn parse_selector_array_index(input: &str) -> IResult<&str, Selector> {
-    preceded(tag("["), terminated(parse_selector_object_index, tag("]")))(input)
+    preceded(tag("["), terminated(parse_index, tag("]")))(input)
 }
 
 fn parse_selector_key(input: &str) -> IResult<&str, Selector> {
@@ -67,6 +77,14 @@ mod tests {
                     Selector::Key("nested"),
                 ]
             )
+        )
+    }
+
+    #[test]
+    fn parse_text_key() {
+        assert_eq!(
+            super::parse("bar[baz]").unwrap(),
+            ("", vec![Selector::Key("bar"), Selector::KeyedIndex("baz"),])
         )
     }
 }
