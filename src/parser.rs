@@ -7,7 +7,7 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_till, take_while},
     combinator::{map, opt},
-    multi::{count, many0, many1, separated_list},
+    multi::{count, many0, many1, separated_list0, separated_list1},
     sequence::{preceded, terminated},
     IResult,
 };
@@ -36,7 +36,7 @@ pub fn parse(input: &str) -> IResult<&str, Nodes> {
 fn parse_nodes(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Nodes>> {
     Box::new(move |input| {
         map(
-            separated_list(tag("\n"), preceded(many0(tag("\n")), parse_node(depth))),
+            separated_list0(tag("\n"), preceded(many0(tag("\n")), parse_node(depth))),
             Nodes::new_fragment,
         )(input)
     })
@@ -111,14 +111,13 @@ fn parse_markdown(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
     Box::new(move |input| {
         let (input, _) = terminated(tag(":markdown"), many1(tag("\n")))(input)?;
         let (input, markdown) = alt((
-            separated_list(many1(tag("\n")), parse_markdown_line(depth + 1)),
+            separated_list1(many1(tag("\n")), parse_markdown_line(depth + 1)),
             map(parse_markdown_line(depth + 1), |v| vec![v]),
         ))(input)?;
 
         Ok((input, Node::Markdown(markdown)))
     })
 }
-
 fn parse_fragment(input: &str) -> IResult<&str, Node> {
     let (input, path) = map(preceded(tag("- fragment "), to_newline), PathBuf::from)(input)?;
 
@@ -197,7 +196,7 @@ fn parse_node(depth: usize) -> Box<dyn Fn(&str) -> IResult<&str, Node>> {
 
 fn parse_fragment_subclass(input: &str) -> IResult<&str, Nodes> {
     let (input, layout) = terminated(parse_extends, tag("\n"))(input)?;
-    let (input, blocks) = separated_list(
+    let (input, blocks) = separated_list1(
         tag("\n"),
         preceded(many0(tag("\n")), parse_block_contents(0)),
     )(input)?;

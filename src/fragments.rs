@@ -41,7 +41,7 @@ impl<'a> std::default::Default for Fragments<'a> {
 #[derive(Debug)]
 pub enum FragmentError<'a> {
     IncompleteParse(PathBuf),
-    ParseError(nom::Err<(&'a str, nom::error::ErrorKind)>),
+    ParseError(nom::Err<nom::error::Error<&'a str>>),
 }
 
 pub fn new(fragments_path: PathBuf) -> HashMap<PathBuf, String> {

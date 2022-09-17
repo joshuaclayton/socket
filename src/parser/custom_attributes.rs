@@ -4,7 +4,7 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_till1, take_while},
     combinator::map,
-    multi::{many0, separated_list},
+    multi::{many0, separated_list1},
     sequence::{pair, preceded, terminated},
     IResult,
 };
@@ -59,7 +59,7 @@ pub fn parse(input: &str) -> IResult<&str, Vec<Attribute>> {
 
     preceded(
         tag("("),
-        terminated(separated_list(tag(" "), parse_attribute), tag(")")),
+        terminated(separated_list1(tag(" "), parse_attribute), tag(")")),
     )(input)
 }
 

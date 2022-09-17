@@ -15,7 +15,7 @@ pub struct Socket<'a> {
 
 #[derive(Debug)]
 pub enum SocketError<'a> {
-    ParseError(nom::Err<(&'a str, nom::error::ErrorKind)>),
+    ParseError(nom::Err<nom::error::Error<&'a str>>),
     StyleError(styles::SassCompileError),
     ContextError(ContextError),
 }
