@@ -49,7 +49,7 @@ fn parse_attributes(input: &str) -> IResult<&str, Vec<Attribute>> {
 }
 
 fn parse_html_class(input: &str) -> IResult<&str, &str> {
-    take_while(|c: char| c.is_alphanumeric() || c == '-' || c == '_' || c == '/' || c == ':')(input)
+    take_while(|c: char| c.is_alphanumeric() || c == '-' || c == '_' || c == '/' || c == ':' || c == '[' || c == ']')(input)
 }
 
 #[cfg(test)]
@@ -59,5 +59,10 @@ mod tests {
     #[test]
     fn tailwind_class() {
         assert_eq!(parse_html_class("w-3/4").unwrap(), ("", "w-3/4"));
+    }
+
+    #[test]
+    fn tailwind_bracket_class() {
+        assert_eq!(parse_html_class("h-[66vh]").unwrap(), ("", "h-[66vh]"));
     }
 }
