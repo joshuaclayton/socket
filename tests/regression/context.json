@@ -5,7 +5,7 @@
     {
       "name": "Jane",
       "age": 55,
-      "email": "jane@example.com"
+      "email_address": "jane@example.com"
     },
     {
       "name": "Joan",

@@ -42,7 +42,7 @@ fn parse_selector_array_index(input: &str) -> IResult<&str, Selector> {
 }
 
 fn parse_selector_key(input: &str) -> IResult<&str, Selector> {
-    map(take_while(|c: char| c.is_alphanumeric()), Selector::Key)(input)
+    map(take_while(|c: char| c.is_alphanumeric() || c == '_'), Selector::Key)(input)
 }
 
 fn parse_usize(input: &str) -> IResult<&str, usize> {
